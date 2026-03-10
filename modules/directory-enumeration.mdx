@@ -1,0 +1,332 @@
+---
+title: "Directory Enumeration"
+description: "Gobuster and Dirb-based web directory discovery module"
+---
+
+## Overview
+
+The `GobusterEnum` module performs web directory and file enumeration using Gobuster as the primary tool with Dirb as an automatic fallback. It discovers hidden directories, configuration files, admin panels, and other resources not linked from the main site.
+
+<Warning>
+**Authorization Required**: Directory brute-forcing generates significant traffic and may trigger rate limiting or IP bans. Only test web applications you own or have explicit written permission to test.
+</Warning>
+
+## Module Location
+
+```
+services/gobuster_enum.py
+```
+
+## Class Definition
+
+```python
+class GobusterEnum:
+    """Enumeración de directorios con Gobuster/Dirb"""
+    
+    def __init__(self, host):
+        self.host = host
+        self.dir_output = Path(f"{Config.OUTPUT_BASE}/gobuster")
+        self.dir_output.mkdir(parents=True, exist_ok=True)
+```
+
+## Core Methods
+
+### enumerate()
+
+Main enumeration method that scans all HTTP services on discovered ports.
+
+```python
+def enumerate(self):
+    """Enumerar directorios en todos los puertos HTTP"""
+    all_dirs = []
+    
+    for port, service in self.host.ports_open.items():
+        if 'http' not in service['service'].lower():
+            continue
+        
+        url = f"http://{self.host.ip}:{port}/"
+        output_file = self.dir_output / f"dirs_{self.host.ip}_{port}.txt"
+        
+        rprint(f"   [cyan]🔎 Gobuster: {url}[/cyan]")
+        
+        # Intentar gobuster primero, si no existe usar dirb
+        dirs = self._run_gobuster(url, output_file)
+        if not dirs:
+            dirs = self._run_dirb(url, output_file)
+        
+        all_dirs.extend(dirs)
+```
+
+Filters for HTTP/HTTPS services only and attempts Gobuster first before falling back to Dirb.
+
+### Directory Display Logic
+
+```python
+for d in dirs:
+    status = d.get('status', '???')
+    path = d.get('path', '')
+    if status in ['200', '301', '302', '403']:
+        color = 'green' if status == '200' else 'yellow' if status in ['301','302'] else 'red'
+        rprint(f"   [{color}][+] {path} (Status: {status})[/{color}]")
+
+return all_dirs
+```
+
+**Color Coding:**
+- **Green** (200): Accessible resource
+- **Yellow** (301/302): Redirect (often valid endpoint)
+- **Red** (403): Forbidden (exists but unauthorized)
+
+**Example Output:**
+
+```
+   🔎 Gobuster: http://192.168.56.101:80/
+   [+] /admin (Status: 200)
+   [+] /config (Status: 403)
+   [+] /uploads (Status: 301)
+   [+] /backup (Status: 200)
+```
+
+### _run_gobuster()
+
+Executes Gobuster directory enumeration.
+
+```python
+def _run_gobuster(self, url, output_file):
+    """Ejecutar gobuster dir"""
+    dirs = []
+    wordlist = Config.GOBUSTER_WORDLIST
+    
+    if not Path(wordlist).exists():
+        return []
+    
+    cmd = [
+        'gobuster', 'dir',
+        '-u', url,
+        '-w', wordlist,
+        '-t', '20',
+        '-q',
+        '--no-error',
+        '-o', str(output_file)
+    ]
+```
+
+**Command Parameters:**
+- `dir`: Directory/file enumeration mode
+- `-u {url}`: Target URL
+- `-w {wordlist}`: Path to wordlist file
+- `-t 20`: 20 concurrent threads
+- `-q`: Quiet mode (less verbose output)
+- `--no-error`: Don't display errors
+- `-o {file}`: Output results to file
+
+**Execution:**
+
+```python
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    output = result.stdout
+    
+    # Parsear resultados: /path (Status: 200)
+    for match in re.findall(r'(/\S+)\s+\(Status:\s*(\d+)\)', output):
+        dirs.append({'path': match[0], 'status': match[1]})
+    
+    # Formato alternativo
+    for match in re.findall(r'(/\S+)\s+\[Status=(\d+)', output):
+        dirs.append({'path': match[0], 'status': match[1]})
+
+except FileNotFoundError:
+    pass  # gobuster no instalado
+except subprocess.TimeoutExpired:
+    rprint("   [yellow]⏰ Gobuster timeout[/yellow]")
+except Exception:
+    pass
+
+return dirs
+```
+
+**Timeout**: 120 seconds (2 minutes)
+
+**Supported Output Formats:**
+1. `/admin (Status: 200)`
+2. `/config [Status=403]`
+
+**Result Structure:**
+```python
+[
+    {'path': '/admin', 'status': '200'},
+    {'path': '/uploads', 'status': '301'},
+    {'path': '/config.php', 'status': '403'}
+]
+```
+
+### _run_dirb()
+
+Fallback method using Dirb when Gobuster is not available.
+
+```python
+def _run_dirb(self, url, output_file):
+    """Fallback: usar dirb si gobuster no está"""
+    dirs = []
+    wordlist = Config.GOBUSTER_WORDLIST
+    
+    if not Path(wordlist).exists():
+        return []
+    
+    cmd = ['dirb', url, wordlist, '-S', '-N', '404']
+```
+
+**Command Parameters:**
+- `{url}`: Target URL
+- `{wordlist}`: Wordlist file
+- `-S`: Silent mode (less output)
+- `-N`: Ignore responses with specified code (404 not found)
+- Timeout: 120 seconds
+
+**Execution & Parsing:**
+
+```python
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    
+    for match in re.findall(r'\+\s+(http\S+)\s+\(CODE:(\d+)', result.stdout):
+        path = match[0].replace(url.rstrip('/'), '')
+        dirs.append({'path': path or '/', 'status': match[1]})
+
+except FileNotFoundError:
+    rprint("   [yellow]⚠️ Ni gobuster ni dirb instalados[/yellow]")
+except subprocess.TimeoutExpired:
+    rprint("   [yellow]⏰ Dirb timeout[/yellow]")
+except Exception:
+    pass
+
+return dirs
+```
+
+**Output Pattern**: `+ http://192.168.56.101/admin (CODE:200)`
+
+Path extraction removes base URL to store relative paths.
+
+## Status Code Interpretation
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 200 | OK | Resource exists and is accessible |
+| 301 | Moved Permanently | Follow redirect, directory likely exists |
+| 302 | Found (Temporary Redirect) | Follow redirect, may require authentication |
+| 403 | Forbidden | Resource exists but access denied |
+| 404 | Not Found | Resource doesn't exist (filtered by `-N 404`) |
+| 500 | Internal Server Error | May indicate vulnerable endpoint |
+
+## Output Files
+
+Results stored in:
+```
+{OUTPUT_BASE}/gobuster/
+  └── dirs_{IP}_{PORT}.txt
+```
+
+**File Format** (Gobuster output):
+```
+/admin (Status: 200)
+/uploads (Status: 301)
+/config.php (Status: 403)
+/backup (Status: 200)
+```
+
+## Configuration Requirements
+
+```python
+Config.GOBUSTER_WORDLIST = "/usr/share/wordlists/dirb/common.txt"
+```
+
+**Common Wordlists:**
+- `/usr/share/wordlists/dirb/common.txt` (4,614 entries)
+- `/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt` (220,560 entries)
+- `/usr/share/seclists/Discovery/Web-Content/common.txt` (4,652 entries)
+
+## Usage Example
+
+```python
+from services.gobuster_enum import GobusterEnum
+from models.host import Host
+
+host = Host(ip="192.168.56.101")
+host.ports_open = {
+    80: {'service': 'http', 'version': 'Apache 2.4'},
+    443: {'service': 'https', 'version': 'Apache 2.4'}
+}
+
+enum = GobusterEnum(host)
+directories = enum.enumerate()
+
+for d in directories:
+    print(f"{d['path']} - {d['status']}")
+```
+
+## Performance Tuning
+
+**Thread Adjustment:**
+```python
+'-t', '20',  # Default: 20 threads
+```
+
+- **Increase** (`-t 50`): Faster scans, more aggressive
+- **Decrease** (`-t 5`): Slower scans, less likely to trigger rate limits
+
+**Timeout Adjustment:**
+```python
+timeout=120  # 2 minutes
+```
+
+For large wordlists, increase to `timeout=300` (5 minutes).
+
+## Dependencies
+
+- **gobuster**: Go-based directory brute-forcer (primary)
+- **dirb**: C-based web content scanner (fallback)
+- **wordlist**: Directory/file name wordlist
+
+## Security Considerations
+
+1. **Rate Limiting**: 20 concurrent threads may trigger WAF blocks
+2. **Detection**: Directory enumeration is easily detected by IDS/IPS
+3. **Server Load**: Aggressive scanning can impact server performance
+4. **False Positives**: 301/302 redirects may not always be valid directories
+5. **Legal Risk**: Unauthorized scanning may violate Computer Fraud and Abuse Act
+
+## Common Findings
+
+**Administrative Panels:**
+- `/admin`, `/administrator`, `/wp-admin`, `/phpmyadmin`
+
+**Configuration Files:**
+- `/config.php`, `/.env`, `/web.config`, `/settings.php`
+
+**Backup Files:**
+- `/backup`, `/old`, `/.git`, `/database.sql`
+
+**Upload Directories:**
+- `/uploads`, `/files`, `/media`, `/images`
+
+## Error Handling
+
+```python
+except FileNotFoundError:
+    # Tool not installed - fallback to alternative
+    pass
+except subprocess.TimeoutExpired:
+    # Scan took too long - partial results saved
+    rprint("   [yellow]⏰ Gobuster timeout[/yellow]")
+except Exception:
+    # Unexpected error - continue with other ports
+    pass
+```
+
+Graceful degradation: Gobuster → Dirb → Empty results
+
+## Related Modules
+
+- **NmapScanner**: Identifies HTTP/HTTPS ports to enumerate
+- **SQLMapInjector**: Tests discovered endpoints for SQL injection
+- **WPForceBrute**: Identifies WordPress installations in discovered directories

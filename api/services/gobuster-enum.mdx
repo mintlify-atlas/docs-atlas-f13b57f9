@@ -1,0 +1,368 @@
+---
+title: "GobusterEnum"
+description: "Web directory and file enumeration using Gobuster and Dirb"
+---
+
+## Class Definition
+
+```python
+class GobusterEnum:
+    def __init__(self, host)
+```
+
+Web content discovery tool that enumerates directories and files on HTTP services using Gobuster (primary) with Dirb as fallback.
+
+## Constructor
+
+### `__init__(host)`
+
+Initializes the directory enumerator with a target host.
+
+<ParamField path="host" type="Host" required>
+  Host object containing IP address and open ports information
+</ParamField>
+
+**Attributes:**
+- `host` (Host): Target host instance
+- `dir_output` (Path): Output directory for scan results (`{Config.OUTPUT_BASE}/gobuster`)
+
+**Example:**
+```python
+enum = GobusterEnum(host)
+```
+
+---
+
+## Public Methods
+
+### `enumerate()`
+
+Enumerates directories and files on all HTTP services detected on the host.
+
+```python
+def enumerate(self) -> list[dict]
+```
+
+**Process:**
+1. Identifies all HTTP/HTTPS ports on the host
+2. Attempts Gobuster scan (primary method)
+3. Falls back to Dirb if Gobuster unavailable
+4. Displays results with color-coded status codes
+
+<ResponseField name="return" type="list[dict]">
+  List of discovered directories/files, each containing:
+  - `path` (str): URL path (e.g., "/admin", "/config.php")
+  - `status` (str): HTTP status code ("200", "301", "403", etc.)
+</ResponseField>
+
+**Example:**
+```python
+dirs = enum.enumerate()
+
+for d in dirs:
+    print(f"{d['path']} - Status: {d['status']}")
+
+# Output:
+# /admin - Status: 200
+# /uploads - Status: 301
+# /config.php - Status: 403
+```
+
+**Console Output:**
+```
+🔎 Gobuster: http://192.168.56.101:80/
+[+] /admin (Status: 200)
+[+] /uploads (Status: 301)
+[+] /config.php (Status: 403)
+[+] /backup (Status: 200)
+```
+
+**Status Code Colors:**
+- **Green** (200): OK - Accessible content
+- **Yellow** (301, 302): Redirect
+- **Red** (403): Forbidden - Interesting but access denied
+
+---
+
+## Private Methods
+
+### `_run_gobuster(url, output_file)`
+
+Executes Gobuster directory enumeration (primary method).
+
+```python
+def _run_gobuster(self, url: str, output_file: Path) -> list[dict]
+```
+
+<ParamField path="url" type="str" required>
+  Target URL (e.g., "http://192.168.56.101:80/")
+</ParamField>
+
+<ParamField path="output_file" type="Path" required>
+  File path to save enumeration results
+</ParamField>
+
+<ResponseField name="return" type="list[dict]">
+  List of discovered paths with status codes, or empty list if Gobuster unavailable
+</ResponseField>
+
+**Gobuster Command:**
+```bash
+gobuster dir \
+  -u http://192.168.56.101:80/ \
+  -w /usr/share/wordlists/dirb/common.txt \
+  -t 20 \
+  -q \
+  --no-error \
+  -o /output/gobuster/dirs_192.168.56.101_80.txt
+```
+
+**Parameters:**
+- `-u`: Target URL
+- `-w`: Wordlist path (from `Config.GOBUSTER_WORDLIST`)
+- `-t 20`: 20 concurrent threads
+- `-q`: Quiet mode (less verbose)
+- `--no-error`: Don't display errors
+- `-o`: Output file
+
+**Timeout**: 120 seconds (2 minutes)
+
+**Output Parsing:**
+
+**Pattern 1: Standard Format**
+```python
+re.findall(r'(/\S+)\s+\(Status:\s*(\d+)\)', output)
+# Matches: /admin (Status: 200)
+#          /uploads (Status: 301)
+```
+
+**Pattern 2: Alternative Format**
+```python
+re.findall(r'(/\S+)\s+\[Status=(\d+)', output)
+# Matches: /admin [Status=200]
+#          /config.php [Status=403]
+```
+
+**Example:**
+```python
+dirs = enum._run_gobuster("http://192.168.56.101:80/", Path("/output/scan.txt"))
+print(dirs)
+# [
+#   {'path': '/admin', 'status': '200'},
+#   {'path': '/uploads', 'status': '301'},
+#   {'path': '/config.php', 'status': '403'}
+# ]
+```
+
+---
+
+### `_run_dirb(url, output_file)`
+
+Executes Dirb directory enumeration (fallback method).
+
+```python
+def _run_dirb(self, url: str, output_file: Path) -> list[dict]
+```
+
+<ParamField path="url" type="str" required>
+  Target URL
+</ParamField>
+
+<ParamField path="output_file" type="Path" required>
+  File path to save results (note: Dirb doesn't use -o flag in this implementation)
+</ParamField>
+
+<ResponseField name="return" type="list[dict]">
+  List of discovered paths, or empty list if Dirb unavailable
+</ResponseField>
+
+**Dirb Command:**
+```bash
+dirb http://192.168.56.101:80/ \
+  /usr/share/wordlists/dirb/common.txt \
+  -S \
+  -N 404
+```
+
+**Parameters:**
+- `-S`: Silent mode (don't show tested words)
+- `-N 404`: Ignore 404 responses
+
+**Timeout**: 120 seconds (2 minutes)
+
+**Output Parsing:**
+```python
+re.findall(r'\+\s+(http\S+)\s+\(CODE:(\d+)', result.stdout)
+# Matches: + http://192.168.56.101/admin (CODE:200)
+```
+
+**Path Normalization:**
+```python
+path = match[0].replace(url.rstrip('/'), '')
+path = path or '/'  # Root if empty
+```
+
+**Example:**
+```python
+dirs = enum._run_dirb("http://192.168.56.101:80/", Path("/output/dirb.txt"))
+print(dirs)
+# [
+#   {'path': '/cgi-bin', 'status': '200'},
+#   {'path': '/images', 'status': '301'}
+# ]
+```
+
+---
+
+## Wordlist Configuration
+
+**Default Wordlist:**
+```python
+wordlist = Config.GOBUSTER_WORDLIST
+# Typically: /usr/share/wordlists/dirb/common.txt
+```
+
+**Wordlist Validation:**
+Both methods check if wordlist exists before execution:
+```python
+if not Path(wordlist).exists():
+    return []  # Skip enumeration
+```
+
+---
+
+## Tool Availability
+
+**Detection and Fallback:**
+```python
+try:
+    # Try Gobuster first
+    result = subprocess.run(['gobuster', 'dir', ...], ...)
+except FileNotFoundError:
+    # Gobuster not installed, return empty
+    pass
+
+# If Gobuster failed, try Dirb
+if not dirs:
+    dirs = self._run_dirb(url, output_file)
+```
+
+**Missing Tools Warning:**
+```
+⚠️ Ni gobuster ni dirb instalados
+```
+
+---
+
+## HTTP Service Detection
+
+**Identifies HTTP/HTTPS ports:**
+```python
+for port, service in self.host.ports_open.items():
+    if 'http' not in service['service'].lower():
+        continue  # Skip non-HTTP services
+    
+    url = f"http://{self.host.ip}:{port}/"
+    # Enumerate...
+```
+
+**Supported Services:**
+- `http`
+- `https`
+- `http-proxy`
+- `http-alt`
+
+---
+
+## Output Files
+
+**File Naming Convention:**
+```python
+output_file = dir_output / f"dirs_{host.ip}_{port}.txt"
+# Example: dirs_192.168.56.101_80.txt
+#          dirs_192.168.56.102_8080.txt
+```
+
+**Directory Structure:**
+```
+{Config.OUTPUT_BASE}/gobuster/
+├── dirs_192.168.56.101_80.txt
+├── dirs_192.168.56.101_443.txt
+└── dirs_192.168.56.102_8080.txt
+```
+
+---
+
+## Status Code Filtering
+
+**Display Filter:**
+```python
+if status in ['200', '301', '302', '403']:
+    color = 'green' if status == '200' else 'yellow' if status in ['301','302'] else 'red'
+    rprint(f"   [{color}][+] {path} (Status: {status})[/{color}]")
+```
+
+**Interesting Status Codes:**
+- **200**: Accessible content (most valuable)
+- **301/302**: Redirects (may indicate hidden resources)
+- **403**: Forbidden (confirms existence but denies access)
+
+**Ignored Codes:**
+- 404: Not Found
+- 500: Server Error
+- Others: Less relevant for enumeration
+
+---
+
+## Error Handling
+
+**Timeout Handling:**
+```python
+try:
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+except subprocess.TimeoutExpired:
+    rprint("   [yellow]⏰ Gobuster timeout[/yellow]")
+    # Returns partial results parsed so far
+```
+
+**Tool Not Found:**
+```python
+except FileNotFoundError:
+    pass  # Silently skip, try fallback
+```
+
+**General Errors:**
+```python
+except Exception:
+    pass  # Continue to next port/tool
+```
+
+---
+
+## Performance Considerations
+
+**Concurrent Threads:**
+- Gobuster: 20 threads (`-t 20`)
+- Dirb: Default (typically 10)
+
+**Timeout Strategy:**
+- Both tools: 120 seconds per port
+- Prevents indefinite hangs on unresponsive servers
+
+---
+
+## Dependencies
+
+- `subprocess`: Execute Gobuster/Dirb commands
+- `re`: Parse output for paths and status codes
+- `pathlib.Path`: File operations
+- `config.Config`: Configuration (wordlist paths)
+- `rich.print`: Formatted console output with colors
+
+---
+
+## Related
+
+- [Host Model](/api/models/host)
+- [Configuration](/api/config)
+- [NmapScanner](/api/services/nmap-scanner) - For initial HTTP service discovery

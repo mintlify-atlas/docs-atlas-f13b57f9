@@ -1,0 +1,348 @@
+---
+title: "WPForceBrute"
+description: "WordPress vulnerability scanning and brute-force attacks using WPScan"
+---
+
+## Class Definition
+
+```python
+class WPForceBrute:
+    def __init__(self, host: Host)
+```
+
+WordPress security testing tool that enumerates users, identifies vulnerable plugins, and performs dictionary-based brute-force attacks.
+
+## Constructor
+
+### `__init__(host)`
+
+Initializes the WPForceBrute scanner with a target host.
+
+<ParamField path="host" type="Host" required>
+  Host object containing IP address and open ports
+</ParamField>
+
+**Attributes:**
+- `host` (Host): Target host instance
+- `wp_dir` (Path): Output directory for WPScan results (`{Config.OUTPUT_BASE}/wpscan`)
+
+**Example:**
+```python
+wp_scanner = WPForceBrute(host)
+```
+
+---
+
+## Public Methods
+
+### `attack()`
+
+Performs WordPress enumeration and brute-force attacks.
+
+```python
+def attack(self) -> list[Vulnerability]
+```
+
+**Attack Phases:**
+1. **Enumeration**: Detect WordPress users and vulnerable plugins/themes
+2. **Brute-Force**: Dictionary attack against discovered users using rockyou.txt
+
+<ResponseField name="return" type="list[Vulnerability]">
+  List of vulnerabilities discovered:
+  - WordPress vulnerabilities (plugins, themes, core)
+  - Weak password vulnerabilities (successful brute-force)
+</ResponseField>
+
+**Example:**
+```python
+vulns = wp_scanner.attack()
+
+for vuln in vulns:
+    print(f"{vuln.name}")
+    print(f"Port: {vuln.port}")
+    print(f"Risk: {vuln.risk.value}")
+    print(f"Evidence: {vuln.evidence_file}")
+```
+
+**Console Output:**
+```
+🔓 WPScan (Enumeración + Brute-Force)...
+🔍 WPScan enumerar: http://192.168.56.101:80/wordpress
+👥 Usuarios encontrados: admin, editor, subscriber
+🔐 Brute-force con rockyou.txt...
+🔑 CREDENCIAL: admin : password123
+💥 Vulnerabilidades WordPress encontradas!
+```
+
+---
+
+## WPScan Commands
+
+### Enumeration Phase
+
+```bash
+wpscan --url http://192.168.56.101:80/wordpress \
+  --enumerate u,vp,ap \
+  --no-banner \
+  --disable-tls-checks \
+  --output /output/wpscan/wpscan_192.168.56.101_80_wordpress.txt
+```
+
+**Enumeration Options:**
+- `u`: Enumerate users
+- `vp`: Vulnerable plugins
+- `ap`: All plugins
+
+**Timeout**: 180 seconds (3 minutes)
+
+### Brute-Force Phase
+
+```bash
+wpscan --url http://192.168.56.101:80/wordpress \
+  --enumerate u \
+  --passwords /usr/share/wordlists/rockyou.txt \
+  --max-threads 10 \
+  --no-banner \
+  --disable-tls-checks \
+  --output /output/wpscan/brute_192.168.56.101_80.txt
+```
+
+**Timeout**: 600 seconds (10 minutes)
+
+---
+
+## Private Methods
+
+### `_parse_wpscan_users(output)`
+
+Extracts usernames from WPScan enumeration output.
+
+```python
+def _parse_wpscan_users(self, output: str) -> list[str]
+```
+
+<ParamField path="output" type="str" required>
+  Complete WPScan console output
+</ParamField>
+
+<ResponseField name="return" type="list[str]">
+  List of unique usernames discovered (duplicates removed)
+</ResponseField>
+
+**Parsing Patterns:**
+
+**Pattern 1: Login/Username Found**
+```python
+re.findall(r'\[!\]\s*(?:Login|Username)\s*found:\s*(\S+)', output, re.IGNORECASE)
+# Matches: [!] Login found: admin
+#          [!] Username found: editor
+```
+
+**Pattern 2: Table Format**
+```python
+re.findall(r'\|\s*(\w+)\s*\|', output)
+# Matches: | admin |
+#          | editor |
+# Filters out headers: name, id, login, slug, status
+```
+
+**Example:**
+```python
+output = """
+[!] Login found: admin
+[!] Username found: editor
+| Name    | ID  |
+| admin   | 1   |
+| editor  | 2   |
+"""
+users = wp_scanner._parse_wpscan_users(output)
+print(users)  # ['admin', 'editor']
+```
+
+---
+
+### `_parse_brute_results(output)`
+
+Extracts successful credentials from brute-force output.
+
+```python
+def _parse_brute_results(self, output: str) -> list[dict]
+```
+
+<ParamField path="output" type="str" required>
+  WPScan brute-force output containing success messages
+</ParamField>
+
+<ResponseField name="return" type="list[dict]">
+  List of credential dictionaries:
+  - `source` (str): "WPScan Brute-Force"
+  - `user` (str): Username
+  - `password` (str): Cracked password
+  - `hash` (str): Empty string (plaintext password)
+</ResponseField>
+
+**Parsing Patterns:**
+
+**Pattern 1: SUCCESS Format**
+```python
+re.findall(r'SUCCESS.*?(\w+)\s*[:\|]\s*(\S+)', output, re.IGNORECASE)
+# Matches: [SUCCESS] admin : password123
+#          SUCCESS | editor | letmein
+```
+
+**Pattern 2: Valid Combination Format**
+```python
+re.findall(r'Valid Combination.*?Username:\s*(\S+).*?Password:\s*(\S+)', output, re.IGNORECASE)
+# Matches: Valid Combination Found!
+#          Username: admin
+#          Password: password123
+```
+
+**Example:**
+```python
+output = """
+[SUCCESS] admin : password123
+Valid Combination Found!
+Username: editor
+Password: letmein
+"""
+creds = wp_scanner._parse_brute_results(output)
+print(creds)
+# [
+#   {'source': 'WPScan Brute-Force', 'user': 'admin', 'password': 'password123', 'hash': ''},
+#   {'source': 'WPScan Brute-Force', 'user': 'editor', 'password': 'letmein', 'hash': ''}
+# ]
+```
+
+---
+
+## Vulnerability Detection
+
+### WordPress Vulnerabilities
+
+**Detection Keywords:**
+```python
+keywords = ['vulnerable', 'critical', 'high', 'users found', 'user(s) identified']
+is_vuln = any(kw in output.lower() for kw in keywords)
+```
+
+**Vulnerability Object:**
+```python
+Vulnerability(
+    name="🔴 WORDPRESS VULNERABILIDADES",
+    description="WPScan detectó vulnerabilidades: http://target/wordpress",
+    port=80,
+    risk=RiskLevel.CRITICAL,
+    evidence_file="/output/wpscan/wpscan_192.168.56.101_80_wordpress.txt",
+    recommendations="Actualizar WordPress + Plugins, WAF, deshabilitar XML-RPC"
+)
+```
+
+### Weak Password Vulnerability
+
+**Triggered When**: Brute-force successfully cracks ≥1 password
+
+```python
+Vulnerability(
+    name="🔴 WORDPRESS CONTRASEÑAS DÉBILES",
+    description="Brute-force exitoso: 2 credenciales obtenidas",
+    port=80,
+    risk=RiskLevel.CRITICAL,
+    evidence_file="/output/wpscan/brute_192.168.56.101_80.txt",
+    recommendations="Contraseñas robustas, limitar intentos login, 2FA"
+)
+```
+
+---
+
+## WordPress Path Detection
+
+Scans common WordPress installation paths from `Config.WORDPRESS_PATHS`:
+```python
+paths = [
+    '/wordpress',
+    '/wp',
+    '/blog',
+    '/'
+]
+```
+
+---
+
+## Wordlist Configuration
+
+**Default Wordlist:**
+```python
+wordlist = Config.WORDLIST_PATH  # /usr/share/wordlists/rockyou.txt
+```
+
+**Fallback Behavior:**
+If wordlist doesn't exist, enumeration continues but brute-force is skipped with warning:
+```
+⚠️ Wordlist no encontrada: /usr/share/wordlists/rockyou.txt
+```
+
+---
+
+## Output Files
+
+**Directory Structure:**
+```
+{Config.OUTPUT_BASE}/wpscan/
+├── wpscan_192.168.56.101_80_wordpress.txt    # Enumeration results
+├── wpscan_192.168.56.101_80_wp.txt           # Alternative path scan
+└── brute_192.168.56.101_80.txt               # Brute-force results
+```
+
+---
+
+## Error Handling
+
+**Timeout Handling:**
+```python
+try:
+    result = subprocess.run(cmd_enum, capture_output=True, text=True, timeout=180)
+except subprocess.TimeoutExpired:
+    print(f"   ⏭️ WPScan timeout en {url}")
+```
+
+**Brute-Force Timeout:**
+```python
+try:
+    brute_result = subprocess.run(cmd_brute, capture_output=True, text=True, timeout=600)
+except subprocess.TimeoutExpired:
+    print(f"   ⏰ Brute-force timeout (10min)")
+```
+
+---
+
+## Integration with Host Model
+
+**Credential Storage:**
+Successful brute-force credentials are automatically added to the host:
+```python
+creds = self._parse_brute_results(brute_result.stdout)
+if creds:
+    self.host.credentials.extend(creds)
+    for c in creds:
+        print(f"   🔑 CREDENCIAL: {c['user']} : {c['password']}")
+```
+
+---
+
+## Dependencies
+
+- `subprocess`: WPScan execution
+- `re`: Pattern matching for user/credential extraction
+- `pathlib.Path`: File operations
+- `config.Config`: Configuration (paths, wordlists)
+- `models.host.Host`: Host data model
+- `models.vuln.Vulnerability`, `RiskLevel`: Vulnerability tracking
+
+---
+
+## Related
+
+- [Host Model](/api/models/host)
+- [Vulnerability Model](/api/models/vulnerability)
+- [Configuration](/api/config)

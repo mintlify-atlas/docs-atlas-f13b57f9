@@ -1,0 +1,396 @@
+---
+title: "Output Directory Structure"
+description: "Understanding the outputs directory and generated audit artifacts"
+---
+
+All audit results, scan outputs, and reports are organized in the `outputs/` directory with subdirectories for each tool.
+
+## Base Directory
+
+The framework creates a base output directory defined in `config.py:5-6`:
+
+```python
+OUTPUT_BASE = Path("outputs")
+OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
+```
+
+All scan results and reports are stored under this directory.
+
+## Directory Tree Structure
+
+A complete audit generates the following structure:
+
+```
+outputs/
+├── REPORT_192_168_56_102_20240315_143022.pdf
+├── nmap/
+│   └── (nmap scan outputs - managed by python-nmap library)
+├── sqlmap/
+│   └── sql_192.168.56.102_80/
+│       ├── sqlmap_full_output.txt
+│       └── 192.168.56.102/
+│           └── dump/
+│               └── dvwa/
+│                   └── users.csv
+├── wpscan/
+│   ├── wpscan_192.168.56.102_80__wordpress_.txt
+│   └── brute_192.168.56.102_80.txt
+└── gobuster/
+    └── dirs_192.168.56.102_80.txt
+```
+
+## nmap/ Subdirectory
+
+Location: `services/nmap_scanner.py:11-12`
+
+```python
+self.output_dir = Path(f"{Config.OUTPUT_BASE}/nmap")
+self.output_dir.mkdir(parents=True, exist_ok=True)
+```
+
+### Contents
+
+The nmap directory stores port scan results. The python-nmap library manages its own output format internally.
+
+### Scan Information Captured
+
+- Open ports (TCP 1-1000)
+- Service names and versions
+- Operating system detection
+- Service fingerprints
+
+**Example scan command:** `services/nmap_scanner.py:18`
+
+```python
+nm.scan(self.target_ip, '1-1000', arguments='-sV -sC -O --top-ports 1000')
+```
+
+### Output Data Structure
+
+For each detected port:
+
+```python
+host.ports_open[int(port)] = {
+    'state': service['state'],
+    'service': service.get('name', 'unknown'),
+    'version': service.get('version', ''),
+    'product': service.get('product', ''),
+    'extra': service.get('extrainfo', '')
+}
+```
+
+## sqlmap/ Subdirectory
+
+Location: `services/sqlmap_inject.py:15-16`
+
+```python
+self.sql_dir = Path(f"{Config.OUTPUT_BASE}/sqlmap")
+self.sql_dir.mkdir(parents=True, exist_ok=True)
+```
+
+### Directory Naming
+
+Each SQL injection test creates a unique output directory:
+
+```python
+output_dir = self.sql_dir / f"sql_{self.host.ip}_{port}"
+output_dir.mkdir(exist_ok=True)
+```
+
+**Example:** `outputs/sqlmap/sql_192.168.56.102_80/`
+
+### SQLMap Output Structure
+
+When dumping DVWA credentials (`services/sqlmap_inject.py:174-184`):
+
+```python
+cmd = [
+    'sqlmap', '-u', dvwa_url,
+    '--cookie', cookie,
+    '--batch', '--risk=2', '--level=2',
+    '-D', 'dvwa', '-T', 'users',
+    '-C', 'user,password',
+    '--dump',
+    '--dump-format=CSV',
+    '--threads=3',
+    f'--output-dir={output_dir}'
+]
+```
+
+### Generated Files
+
+**1. Full Output Log**
+
+Location: `services/sqlmap_inject.py:198-199`
+
+```python
+debug_file = output_dir / "sqlmap_full_output.txt"
+debug_file.write_text(full_output, errors='ignore')
+```
+
+**Example path:**
+```
+outputs/sqlmap/sql_192.168.56.102_80/sqlmap_full_output.txt
+```
+
+Contains complete SQLMap console output including:
+- Injection point detection
+- Payload attempts
+- Database enumeration
+- Table dumps
+- Error messages
+
+**2. CSV Database Dumps**
+
+SQLMap creates nested directories for dumped data:
+
+```
+outputs/sqlmap/sql_192.168.56.102_80/192.168.56.102/dump/dvwa/users.csv
+```
+
+**Example users.csv format:**
+```csv
+user_id,first_name,last_name,user,password,avatar
+1,admin,admin,admin,5f4dcc3b5aa765d61d8327deb882cf99,/dvwa/hackable/users/admin.jpg
+2,Gordon,Brown,gordonb,e99a18c428cb38d5f260853678922e03,/dvwa/hackable/users/gordonb.jpg
+```
+
+### Credential Extraction
+
+The framework parses credentials from multiple sources (`services/sqlmap_inject.py:50-154`):
+
+**1. CSV Files** - Extracts MD5 hashes and usernames
+**2. Console Output** - Parses table format output
+**3. Dump Files** - Searches any file in dump directories
+
+## wpscan/ Subdirectory
+
+Location: `services/wpforce_brute.py:12-13`
+
+```python
+self.wp_dir = Path(f"{Config.OUTPUT_BASE}/wpscan")
+self.wp_dir.mkdir(parents=True, exist_ok=True)
+```
+
+### Generated Files
+
+**1. Enumeration Results**
+
+Filename format: `wpscan_{ip}_{port}_{path}.txt`
+
+Location: `services/wpforce_brute.py:47`
+
+```python
+output_file = self.wp_dir / f"wpscan_{self.host.ip}_{port}_{path.replace('/', '_')}.txt"
+```
+
+**Example:**
+```
+outputs/wpscan/wpscan_192.168.56.102_80__wordpress_.txt
+```
+
+Contains:
+- WordPress version detection
+- Installed plugins and their versions
+- Vulnerable plugins (CVEs)
+- Enumerated usernames
+- Theme information
+
+**2. Brute Force Results**
+
+Filename format: `brute_{ip}_{port}.txt`
+
+Location: `services/wpforce_brute.py:83`
+
+```python
+brute_output = self.wp_dir / f"brute_{self.host.ip}_{port}.txt"
+```
+
+**Example:**
+```
+outputs/wpscan/brute_192.168.56.102_80.txt
+```
+
+Contains:
+- Password attack attempts
+- Valid credentials found
+- Failed login attempts
+- Time taken per user
+
+### WPScan Commands
+
+**Enumeration:** `services/wpforce_brute.py:52-57`
+
+```python
+cmd_enum = [
+    'wpscan', '--url', url,
+    '--enumerate', 'u,vp,ap',  # users, vulnerable plugins, all plugins
+    '--no-banner', '--disable-tls-checks',
+    '--output', str(output_file)
+]
+```
+
+**Brute Force:** `services/wpforce_brute.py:86-93`
+
+```python
+cmd_brute = [
+    'wpscan', '--url', url,
+    '--enumerate', 'u',
+    '--passwords', '/usr/share/wordlists/rockyou.txt',
+    '--max-threads', '10',
+    '--no-banner', '--disable-tls-checks',
+    '--output', str(brute_output)
+]
+```
+
+## gobuster/ Subdirectory
+
+Location: `services/gobuster_enum.py:13-14`
+
+```python
+self.dir_output = Path(f"{Config.OUTPUT_BASE}/gobuster")
+self.dir_output.mkdir(parents=True, exist_ok=True)
+```
+
+### Generated Files
+
+Filename format: `dirs_{ip}_{port}.txt`
+
+Location: `services/gobuster_enum.py:25`
+
+```python
+output_file = self.dir_output / f"dirs_{self.host.ip}_{port}.txt"
+```
+
+**Example:**
+```
+outputs/gobuster/dirs_192.168.56.102_80.txt
+```
+
+### Directory Enumeration
+
+Command: `services/gobuster_enum.py:53-61`
+
+```python
+cmd = [
+    'gobuster', 'dir',
+    '-u', url,  # e.g., http://192.168.56.102:80/
+    '-w', '/usr/share/wordlists/dirb/common.txt',
+    '-t', '20',  # 20 threads
+    '-q',        # quiet mode
+    '--no-error',
+    '-o', str(output_file)
+]
+```
+
+### Output Format
+
+Example content:
+
+```
+/admin                (Status: 301) [Size: 312] [--> http://192.168.56.102/admin/]
+/index.php            (Status: 200) [Size: 1234]
+/login.php            (Status: 200) [Size: 4567]
+/.htaccess            (Status: 403) [Size: 289]
+/uploads              (Status: 301) [Size: 315] [--> http://192.168.56.102/uploads/]
+```
+
+### Fallback: Dirb
+
+If Gobuster is not installed, the framework falls back to Dirb (`services/gobuster_enum.py:84-108`):
+
+```python
+cmd = ['dirb', url, wordlist, '-S', '-N', '404']
+```
+
+## PDF Report Location
+
+The final PDF report is saved directly in the `outputs/` directory.
+
+### Filename Format
+
+Location: `reporter/pdf_generator.py:24-25`
+
+```python
+self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+self.filename = Path(f"outputs/REPORT_{host.ip.replace('.', '_')}_{self.timestamp}.pdf")
+```
+
+### Example Filenames
+
+```
+outputs/REPORT_192_168_56_102_20240315_143022.pdf
+outputs/REPORT_10_0_0_15_20240315_091545.pdf
+outputs/REPORT_172_16_5_100_20240316_163012.pdf
+```
+
+### Confirmation Message
+
+Location: `reporter/pdf_generator.py:633`
+
+```python
+print(f"   📄 ✅ REPORT GENERADO: {self.filename}")
+```
+
+## File Naming Conventions
+
+All output files follow consistent naming patterns:
+
+| Tool | Pattern | Example |
+|------|---------|----------|
+| **PDF Report** | `REPORT_{ip}_{timestamp}.pdf` | `REPORT_192_168_56_102_20240315_143022.pdf` |
+| **Nmap** | Managed by library | (internal) |
+| **SQLMap** | `sql_{ip}_{port}/` | `sql_192.168.56.102_80/` |
+| **WPScan Enum** | `wpscan_{ip}_{port}_{path}.txt` | `wpscan_192.168.56.102_80__wordpress_.txt` |
+| **WPScan Brute** | `brute_{ip}_{port}.txt` | `brute_192.168.56.102_80.txt` |
+| **Gobuster** | `dirs_{ip}_{port}.txt` | `dirs_192.168.56.102_80.txt` |
+
+## IP Address Formatting
+
+In filenames, IP addresses use different formats:
+
+- **PDF Reports**: Underscores replace dots → `192_168_56_102`
+- **SQLMap/Other**: Standard dot notation → `192.168.56.102`
+
+## Storage Considerations
+
+### Directory Creation
+
+All subdirectories are created automatically with `mkdir(parents=True, exist_ok=True)`, ensuring:
+- Parent directories are created recursively
+- No errors if directory already exists
+- Safe for multiple runs
+
+### File Overwriting
+
+Output files use unique identifiers:
+- **Timestamps** prevent PDF report collisions
+- **Port numbers** allow multiple service scans
+- **URL paths** differentiate WordPress installations
+
+### Cleanup
+
+The framework does not automatically delete old outputs. Manual cleanup recommended:
+
+```bash
+# Remove all outputs
+rm -rf outputs/
+
+# Remove specific tool outputs
+rm -rf outputs/sqlmap/
+rm -rf outputs/wpscan/
+
+# Remove old reports (keep latest)
+find outputs/ -name "REPORT_*.pdf" -mtime +30 -delete
+```
+
+## Accessing Results
+
+All results are referenced in the PDF report's conclusions section:
+
+> "Toda la evidencia recopilada se encuentra en el directorio outputs/"
+
+Reviewers can:
+1. Read the PDF report for high-level findings
+2. Navigate to specific subdirectories for detailed evidence
+3. Examine raw tool output for verification

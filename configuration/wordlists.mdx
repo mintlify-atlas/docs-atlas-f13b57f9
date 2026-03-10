@@ -1,0 +1,531 @@
+---
+title: Wordlist Configuration
+description: Configure wordlists for brute-force attacks and directory enumeration
+icon: list
+---
+
+Wordlists are essential for brute-force attacks and directory enumeration. The Ethical Audit Framework uses different wordlists for WPScan password attacks and Gobuster directory discovery.
+
+## Default Wordlist Configuration
+
+Wordlist paths are configured in `source/config.py`:
+
+```python
+class Config:
+    # Wordlist for brute-force
+    WORDLIST_PATH = '/usr/share/wordlists/rockyou.txt'
+    
+    # Gobuster wordlist
+    GOBUSTER_WORDLIST = '/usr/share/wordlists/dirb/common.txt'
+```
+
+## Wordlist Types
+
+<Tabs>
+  <Tab title="Password Wordlist">
+    <ParamField path="WORDLIST_PATH" type="string" default="/usr/share/wordlists/rockyou.txt">
+      Used by **WPScan** for WordPress login brute-force attacks (menu option 5)
+    </ParamField>
+    
+    **rockyou.txt Details:**
+    - **Size:** 139.9 MB (compressed), 14,344,391 passwords
+    - **Source:** Real passwords from RockYou data breach (2009)
+    - **Format:** Plain text, one password per line
+    - **Coverage:** Includes common passwords, leetspeak, keyboard patterns
+    
+    **Default Location (Kali Linux):**
+    ```bash
+    /usr/share/wordlists/rockyou.txt
+    ```
+    
+    **Extraction (if compressed):**
+    ```bash
+    sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+    ```
+  </Tab>
+  
+  <Tab title="Directory Wordlist">
+    <ParamField path="GOBUSTER_WORDLIST" type="string" default="/usr/share/wordlists/dirb/common.txt">
+      Used by **Gobuster** for directory and file enumeration (menu options 1, 2, 3)
+    </ParamField>
+    
+    **common.txt Details:**
+    - **Size:** 36.6 KB, 4,614 entries
+    - **Source:** DIRB project common directories
+    - **Format:** Plain text, one path per line
+    - **Coverage:** Common web directories, files, admin panels
+    
+    **Default Location (Kali Linux):**
+    ```bash
+    /usr/share/wordlists/dirb/common.txt
+    ```
+    
+    **Sample Entries:**
+    ```
+    /admin
+    /backup
+    /config
+    /images
+    /uploads
+    /wp-admin
+    /login.php
+    ```
+  </Tab>
+</Tabs>
+
+## Verifying Wordlist Availability
+
+Before running audits, verify wordlists exist:
+
+<CodeGroup>
+```bash Check Paths
+# Check if wordlists exist
+ls -lh /usr/share/wordlists/rockyou.txt
+ls -lh /usr/share/wordlists/dirb/common.txt
+
+# View wordlist statistics
+wc -l /usr/share/wordlists/rockyou.txt
+wc -l /usr/share/wordlists/dirb/common.txt
+```
+
+```bash Expected Output
+# rockyou.txt
+-rw-r--r-- 1 root root 134M Jul 18 2024 /usr/share/wordlists/rockyou.txt
+14344391 /usr/share/wordlists/rockyou.txt
+
+# common.txt
+-rw-r--r-- 1 root root 37K Jul 18 2024 /usr/share/wordlists/dirb/common.txt
+4614 /usr/share/wordlists/dirb/common.txt
+```
+
+```bash Preview Contents
+# View first 10 passwords
+head /usr/share/wordlists/rockyou.txt
+
+# View first 10 directories
+head /usr/share/wordlists/dirb/common.txt
+```
+</CodeGroup>
+
+<Warning>
+If rockyou.txt is missing or compressed:
+
+```bash
+# Extract from gz archive
+sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+
+# Verify extraction
+ls -lh /usr/share/wordlists/rockyou.txt
+```
+</Warning>
+
+## Custom Wordlist Setup
+
+### Creating Custom Password Wordlists
+
+For targeted attacks, create custom wordlists:
+
+<Tabs>
+  <Tab title="Top Passwords Only">
+    **Create subset of rockyou.txt:**
+    
+    ```bash
+    # Top 10,000 passwords
+    head -n 10000 /usr/share/wordlists/rockyou.txt > ~/wordlists/top10k.txt
+    
+    # Top 100,000 passwords
+    head -n 100000 /usr/share/wordlists/rockyou.txt > ~/wordlists/top100k.txt
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    WORDLIST_PATH = '/home/user/wordlists/top10k.txt'
+    ```
+    
+    **Benefits:**
+    - Faster brute-force (seconds vs hours)
+    - Good for testing/development
+    - Covers most common weak passwords
+  </Tab>
+  
+  <Tab title="Organization-Specific">
+    **Create custom wordlist with common patterns:**
+    
+    ```bash
+    # Create custom wordlist
+    cat > ~/wordlists/custom.txt << EOF
+    CompanyName2024
+    CompanyName2023
+    Welcome123
+    Password1
+    Admin2024
+    Test1234
+    Spring2024
+    Winter2024
+    EOF
+    ```
+    
+    **Combine with rockyou.txt:**
+    
+    ```bash
+    # Merge custom + top passwords
+    cat ~/wordlists/custom.txt > ~/wordlists/combined.txt
+    head -n 10000 /usr/share/wordlists/rockyou.txt >> ~/wordlists/combined.txt
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    WORDLIST_PATH = '/home/user/wordlists/combined.txt'
+    ```
+  </Tab>
+  
+  <Tab title="Generate with Crunch">
+    **Generate numeric passwords:**
+    
+    ```bash
+    # 4-digit PINs (0000-9999)
+    crunch 4 4 0123456789 -o ~/wordlists/pins.txt
+    
+    # 6-8 character alphanumeric
+    crunch 6 8 abcdefghijklmnopqrstuvwxyz0123456789 -o ~/wordlists/alphanum.txt
+    ```
+    
+    **Generate pattern-based:**
+    
+    ```bash
+    # Pattern: Company + 4 digits
+    crunch 11 11 -t Company@@@@ -o ~/wordlists/pattern.txt
+    # Generates: Company0000, Company0001, ... Company9999
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    WORDLIST_PATH = '/home/user/wordlists/pattern.txt'
+    ```
+  </Tab>
+</Tabs>
+
+### Creating Custom Directory Wordlists
+
+Optimize directory enumeration with targeted wordlists:
+
+<Tabs>
+  <Tab title="SecLists">
+    **Install SecLists collection:**
+    
+    ```bash
+    # Clone SecLists
+    git clone https://github.com/danielmiessler/SecLists.git ~/SecLists
+    
+    # Popular directory wordlists:
+    # - ~/SecLists/Discovery/Web-Content/common.txt (4,651 entries)
+    # - ~/SecLists/Discovery/Web-Content/directory-list-2.3-medium.txt (220,560 entries)
+    # - ~/SecLists/Discovery/Web-Content/raft-large-directories.txt (62,284 entries)
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    GOBUSTER_WORDLIST = '/home/user/SecLists/Discovery/Web-Content/directory-list-2.3-medium.txt'
+    ```
+  </Tab>
+  
+  <Tab title="Custom Paths">
+    **Create application-specific wordlist:**
+    
+    ```bash
+    cat > ~/wordlists/webapp.txt << EOF
+    /admin
+    /administrator
+    /backup
+    /config
+    /database
+    /uploads
+    /api
+    /api/v1
+    /dashboard
+    /phpmyadmin
+    /wp-admin
+    /wp-content
+    /wp-includes
+    /.git
+    /.env
+    /config.php
+    /backup.sql
+    EOF
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    GOBUSTER_WORDLIST = '/home/user/wordlists/webapp.txt'
+    ```
+  </Tab>
+  
+  <Tab title="Filtered DIRB">
+    **Filter existing wordlists:**
+    
+    ```bash
+    # Only PHP files
+    grep '.php$' /usr/share/wordlists/dirb/common.txt > ~/wordlists/php-only.txt
+    
+    # Only directories (no extensions)
+    grep -v '\.' /usr/share/wordlists/dirb/common.txt > ~/wordlists/dirs-only.txt
+    
+    # Remove false positives
+    grep -v 'favicon\|robots' /usr/share/wordlists/dirb/common.txt > ~/wordlists/filtered.txt
+    ```
+    
+    **Update config.py:**
+    
+    ```python
+    GOBUSTER_WORDLIST = '/home/user/wordlists/php-only.txt'
+    ```
+  </Tab>
+</Tabs>
+
+## Performance Considerations
+
+<AccordionGroup>
+  <Accordion title="Wordlist Size vs Speed">
+    **Impact on attack duration:**
+    
+    | Wordlist | Size | WPScan Time* | Gobuster Time* |
+    |----------|------|--------------|----------------|
+    | top1000.txt | 1,000 | ~30 seconds | ~5 seconds |
+    | top10k.txt | 10,000 | ~5 minutes | ~30 seconds |
+    | common.txt | 4,614 | ~2 minutes | ~20 seconds |
+    | rockyou.txt | 14M | ~8-12 hours | N/A |
+    | directory-list-2.3-medium.txt | 220K | N/A | ~10 minutes |
+    
+    *Approximate times, varies by network speed and target responsiveness
+    
+    **Recommendations:**
+    - **Development/Testing:** Use top1000-10000 for quick results
+    - **CTF/Labs:** Use full rockyou.txt for comprehensive coverage
+    - **Production Pentests:** Start small, escalate if needed
+  </Accordion>
+  
+  <Accordion title="Network and Target Impact">
+    **Factors affecting performance:**
+    
+    1. **Network Latency:**
+       - Local VM: &lt;1ms (fast)
+       - Same subnet: 1-10ms (moderate)
+       - Remote host: 50-200ms (slow)
+    
+    2. **Target Response Time:**
+       - Failed login: 50-100ms
+       - Rate limiting: 1-5 seconds per attempt
+       - WAF/IPS: May block after N attempts
+    
+    3. **Concurrent Threads:**
+       - WPScan: 5-10 threads (default)
+       - Gobuster: 10 threads (default)
+       - Higher threads = faster but more detectable
+  </Accordion>
+  
+  <Accordion title="Optimization Strategies">
+    **1. Start Small, Escalate:**
+    ```python
+    # Phase 1: Quick test
+    WORDLIST_PATH = '/usr/share/wordlists/fasttrack.txt'  # 222 passwords
+    
+    # Phase 2: Common passwords
+    WORDLIST_PATH = '/home/user/wordlists/top10k.txt'
+    
+    # Phase 3: Full attack
+    WORDLIST_PATH = '/usr/share/wordlists/rockyou.txt'
+    ```
+    
+    **2. Filter by Intelligence:**
+    ```bash
+    # If you know password policy: min 8 chars, must have number
+    grep -E '^.{8,}' /usr/share/wordlists/rockyou.txt | \
+    grep '[0-9]' > ~/wordlists/policy-compliant.txt
+    ```
+    
+    **3. Combine with OSINT:**
+    ```bash
+    # Add discovered usernames, company names, dates
+    cat > ~/wordlists/osint.txt << EOF
+    john.doe
+    johndoe
+    jdoe2024
+    CompanyName
+    CompanyName123
+    EOF
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Wordlist Locations
+
+Standard wordlist paths across distributions:
+
+<CodeGroup>
+```bash Kali Linux
+# Password wordlists
+/usr/share/wordlists/rockyou.txt
+/usr/share/wordlists/fasttrack.txt
+/usr/share/wordlists/metasploit/
+
+# Directory wordlists
+/usr/share/wordlists/dirb/common.txt
+/usr/share/wordlists/dirb/big.txt
+/usr/share/wordlists/dirbuster/
+
+# SecLists (if installed)
+/usr/share/seclists/
+```
+
+```bash ParrotOS
+# Password wordlists
+/usr/share/wordlists/rockyou.txt.gz
+/usr/share/wordlists/john.lst
+
+# Directory wordlists
+/usr/share/wordlists/dirb/
+/usr/share/wordlists/wfuzz/
+```
+
+```bash Ubuntu/Debian
+# Install wordlists
+sudo apt install wordlists
+
+# Paths after installation
+/usr/share/wordlists/
+
+# Or install SecLists
+sudo apt install seclists
+/usr/share/seclists/
+```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Wordlist Not Found Error">
+    **Error:**
+    ```
+    FileNotFoundError: [Errno 2] No such file or directory: '/usr/share/wordlists/rockyou.txt'
+    ```
+    
+    **Solutions:**
+    
+    ```bash
+    # 1. Check if compressed
+    ls /usr/share/wordlists/rockyou.txt.gz
+    sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+    
+    # 2. Install wordlists package
+    sudo apt update
+    sudo apt install wordlists
+    
+    # 3. Download manually
+    sudo mkdir -p /usr/share/wordlists
+    cd /usr/share/wordlists
+    sudo wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt
+    
+    # 4. Use alternative path
+    # Update config.py to point to existing wordlist
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission Denied Error">
+    **Error:**
+    ```
+    PermissionError: [Errno 13] Permission denied: '/usr/share/wordlists/rockyou.txt'
+    ```
+    
+    **Solutions:**
+    
+    ```bash
+    # Check file permissions
+    ls -l /usr/share/wordlists/rockyou.txt
+    
+    # Fix permissions
+    sudo chmod 644 /usr/share/wordlists/rockyou.txt
+    
+    # Or copy to user directory
+    cp /usr/share/wordlists/rockyou.txt ~/wordlists/
+    
+    # Update config.py
+    WORDLIST_PATH = '/home/user/wordlists/rockyou.txt'
+    ```
+  </Accordion>
+  
+  <Accordion title="Attack Too Slow">
+    **Problem:** WPScan taking hours with rockyou.txt
+    
+    **Solutions:**
+    
+    ```bash
+    # 1. Use smaller wordlist
+    head -n 10000 /usr/share/wordlists/rockyou.txt > ~/wordlists/top10k.txt
+    
+    # 2. Use common passwords first
+    # Framework automatically tries COMMON_PASSWORDS before wordlist
+    # Check config.py COMMON_PASSWORDS list
+    
+    # 3. Add likely passwords to COMMON_PASSWORDS
+    # Edit config.py:
+    COMMON_PASSWORDS = [
+        'password', 'admin', 'admin123',
+        # Add discovered patterns
+        'YourTargetName123', 'Welcome2024'
+    ]
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="code">
+    - Use small wordlists (1K-10K entries)
+    - Fast feedback loop for testing
+    - Verify functionality before full run
+  </Card>
+  
+  <Card title="Production Pentests" icon="shield">
+    - Start with common passwords
+    - Escalate to full wordlists if needed
+    - Monitor for rate limiting/blocking
+  </Card>
+  
+  <Card title="CTF Challenges" icon="flag">
+    - Use full rockyou.txt for coverage
+    - Check for password hints in challenge
+    - Create custom wordlists from hints
+  </Card>
+  
+  <Card title="Lab Practice" icon="flask">
+    - Test different wordlist sizes
+    - Measure performance impact
+    - Experiment with custom wordlists
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Configuration Settings" icon="gear" href="/configuration/settings">
+    View all configuration options including COMMON_PASSWORDS
+  </Card>
+  
+  <Card title="WordPress Attack" icon="wordpress" href="/modules/wordpress-testing">
+    Learn how WPScan uses the password wordlist
+  </Card>
+  
+  <Card title="Directory Enumeration" icon="folder-tree" href="/modules/directory-enumeration">
+    See how Gobuster uses directory wordlists
+  </Card>
+  
+  <Card title="Hash Cracking" icon="key" href="/modules/hash-cracking">
+    Understand the two-phase cracking process
+  </Card>
+</CardGroup>

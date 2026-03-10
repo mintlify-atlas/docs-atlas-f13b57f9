@@ -1,0 +1,146 @@
+---
+title: 'AuditEngine'
+description: 'Main orchestration engine for running security audits'
+---
+
+## Overview
+
+The `AuditEngine` class coordinates the complete security audit workflow, executing all phases from reconnaissance to reporting.
+
+## Class Definition
+
+```python
+class AuditEngine:
+    def __init__(self, target_ip)
+```
+
+### Constructor Parameters
+
+<ParamField path="target_ip" type="str" required>
+  The IP address of the target host to audit
+</ParamField>
+
+### Instance Attributes
+
+<ResponseField name="target_ip" type="str">
+  The target IP address being audited
+</ResponseField>
+
+<ResponseField name="host" type="Host | None" default="None">
+  Host object containing audit results. Populated after running the audit.
+</ResponseField>
+
+## Methods
+
+### run_full_audit()
+
+Executes a complete security audit through six phases:
+
+1. **Reconnaissance (Nmap)** - Port scanning and service detection
+2. **Directory Enumeration (Gobuster)** - Web directory discovery
+3. **SQL Injection (SQLMap)** - DVWA SQL injection testing and database dumping
+4. **WordPress Testing (WPScan)** - WordPress vulnerability scanning and brute-force
+5. **Hash Cracking** - Credential hash cracking (MD5)
+6. **Risk Analysis** - Overall risk level calculation
+
+```python
+def run_full_audit(self)
+```
+
+<ParamField path="return" type="None">
+  This method does not return a value. Results are stored in `self.host` and a PDF report is generated.
+</ParamField>
+
+#### Workflow Details
+
+**Phase 1: Reconnaissance**
+```python
+self.host = NmapScanner(self.target_ip).full_scan()
+```
+Creates a `Host` object with discovered ports and services.
+
+**Phase 2: Directory Enumeration**
+```python
+dirs = GobusterEnum(self.host).enumerate()
+self.host.directories = dirs
+```
+Populates the `directories` attribute with discovered web paths.
+
+**Phase 3: SQL Injection**
+```python
+sql_vulns = SQLMapInjector(self.host).attack()
+self.host.vulnerabilities.extend(sql_vulns)
+```
+Adds SQL injection vulnerabilities to the host's vulnerability list.
+
+**Phase 4: WordPress Testing**
+```python
+wp_vulns = WPForceBrute(self.host).attack()
+self.host.vulnerabilities.extend(wp_vulns)
+```
+Adds WordPress-related vulnerabilities and credentials.
+
+**Phase 5: Hash Cracking**
+```python
+if self.host.credentials:
+    cracked = HashCracker.crack_credentials(self.host.credentials)
+```
+Attempts to crack any discovered credential hashes.
+
+**Phase 6: Risk Analysis**
+```python
+RiskAnalyzer.analyze(self.host)
+```
+Calculates overall risk level based on discovered vulnerabilities.
+
+**Report Generation**
+```python
+PDFReportGenerator(self.host).generate()
+```
+Generates a comprehensive PDF report in the `outputs/` directory.
+
+## Usage Example
+
+```python
+from audit_engine import AuditEngine
+
+# Initialize the audit engine
+engine = AuditEngine("192.168.1.100")
+
+# Run the full audit
+engine.run_full_audit()
+
+# Access results
+print(f"Ports found: {len(engine.host.ports_open)}")
+print(f"Vulnerabilities: {len(engine.host.vulnerabilities)}")
+print(f"Risk level: {engine.host.risk_level.value}")
+```
+
+## Output
+
+The audit produces:
+
+- Console output with color-coded progress and results
+- PDF report: `outputs/REPORT_{ip}_*.pdf`
+- Raw tool outputs in `outputs/` directory
+
+### Console Summary
+
+After completion, displays:
+- Number of open ports
+- Directories discovered
+- Total vulnerabilities found
+- Credentials extracted
+- Overall risk level
+- Report file location
+
+## Dependencies
+
+Required services:
+- `NmapScanner` - audit_engine.py:1
+- `GobusterEnum` - audit_engine.py:4
+- `SQLMapInjector` - audit_engine.py:3
+- `WPForceBrute` - audit_engine.py:2
+- `HashCracker` - audit_engine.py:5
+- `RiskAnalyzer` - audit_engine.py:6
+- `PDFReportGenerator` - audit_engine.py:7

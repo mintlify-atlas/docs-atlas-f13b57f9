@@ -1,0 +1,434 @@
+---
+title: 'PDFReportGenerator'
+description: 'Generate comprehensive PDF security audit reports using ReportLab'
+---
+
+## Overview
+
+The `PDFReportGenerator` class creates professionally formatted PDF reports for security audits. It generates a complete audit report including cover page, executive summary, methodology, scanning results, penetration testing findings, risk analysis, and recommendations.
+
+## Class Definition
+
+```python
+class PDFReportGenerator:
+    def __init__(self, host: Host)
+```
+
+<ParamField path="host" type="Host" required>
+  The Host object containing all audit data (IP, ports, vulnerabilities, credentials, etc.)
+</ParamField>
+
+### Attributes
+
+<ResponseField name="host" type="Host">
+  The target host object containing audit results
+</ResponseField>
+
+<ResponseField name="timestamp" type="str">
+  Timestamp of report generation in format `YYYYMMDD_HHMMSS`
+</ResponseField>
+
+<ResponseField name="filename" type="Path">
+  Output file path: `outputs/REPORT_{ip}_{timestamp}.pdf`
+</ResponseField>
+
+<ResponseField name="styles" type="StyleSheet">
+  ReportLab stylesheet containing all paragraph styles
+</ResponseField>
+
+## Color Constants
+
+The following color constants are used throughout the report styling:
+
+```python
+DARK_BG = HexColor('#1a1a2e')
+ACCENT = HexColor('#e94560')
+LIGHT_BG = HexColor('#f5f5f5')
+SUCCESS_GREEN = HexColor('#27ae60')
+WARNING_ORANGE = HexColor('#f39c12')
+```
+
+<ResponseField name="DARK_BG" type="HexColor">
+  Dark background color `#1a1a2e` - used for headers
+</ResponseField>
+
+<ResponseField name="ACCENT" type="HexColor">
+  Accent color `#e94560` - used for highlights and dividers
+</ResponseField>
+
+<ResponseField name="LIGHT_BG" type="HexColor">
+  Light background color `#f5f5f5` - used for alternating table rows
+</ResponseField>
+
+<ResponseField name="SUCCESS_GREEN" type="HexColor">
+  Success color `#27ae60` - used for positive results
+</ResponseField>
+
+<ResponseField name="WARNING_ORANGE" type="HexColor">
+  Warning color `#f39c12` - used for warnings
+</ResponseField>
+
+## Methods
+
+### generate()
+
+Generates the complete PDF report by building all sections and writing to file.
+
+```python
+def generate(self):
+```
+
+**Returns:** None (writes PDF to `self.filename`)
+
+**Side Effects:**
+- Creates PDF file in `outputs/` directory
+- Prints confirmation message to stdout
+
+**Example:**
+
+```python
+from models.host import Host
+from reporter.pdf_generator import PDFReportGenerator
+
+# Create host with audit data
+host = Host(ip="192.168.1.100")
+host.ports_open = {
+    80: {'state': 'open', 'service': 'http', 'product': 'Apache', 'version': '2.4.41'}
+}
+
+# Generate report
+generator = PDFReportGenerator(host)
+generator.generate()
+# Output: 📄 ✅ REPORT GENERADO: outputs/REPORT_192_168_1_100_20260310_143022.pdf
+```
+
+### _create_custom_styles()
+
+Creates custom paragraph styles for the report sections.
+
+```python
+def _create_custom_styles(self):
+```
+
+**Styles Created:**
+- `CoverTitle` - 24pt centered title for cover page
+- `CoverSubtitle` - 14pt centered subtitle
+- `SectionTitle` - 16pt section headers
+- `SubSection` - 12pt subsection headers
+- `BodyText` - 10pt justified body text
+- `AlertCritical` - 10pt red text with light red background
+- `AlertSuccess` - 10pt green text for positive results
+
+### _add_cover_page()
+
+Adds the cover page with audit overview information.
+
+```python
+def _add_cover_page(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Cover Page Contents:**
+- Report title
+- Framework version
+- Target IP address
+- Operating system detection
+- Risk level
+- Analysis date
+- Summary statistics (open ports, vulnerabilities, credentials)
+
+### _add_index()
+
+Adds table of contents listing all report sections.
+
+```python
+def _add_index(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Sections Listed:**
+1. Resumen Ejecutivo
+2. Metodología
+3. Herramientas Utilizadas
+4. Fase de Escaneo (Reconocimiento)
+5. Fase de Penetración: Fuerza Bruta (WordPress)
+6. Fase de Penetración: Inyección SQL (DVWA)
+7. Credenciales Extraídas
+8. Análisis de Riesgo
+9. Recomendaciones de Seguridad
+10. Conclusiones
+
+### _add_executive_summary()
+
+Adds executive summary with high-level findings.
+
+```python
+def _add_executive_summary(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Summary Includes:**
+- Target IP and OS
+- Total open ports
+- Total vulnerabilities by severity (critical, high, medium)
+- Total credentials extracted
+- Total directories discovered
+- Overall risk level
+
+### _add_methodology()
+
+Adds methodology section describing the audit process.
+
+```python
+def _add_methodology(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Phases Documented:**
+1. Reconnaissance (Nmap, Gobuster)
+2. WordPress Brute Force (WPScan)
+3. SQL Injection (SQLMap)
+4. Risk Analysis
+5. Reporting
+
+### _add_tools()
+
+Adds table of tools used during the audit.
+
+```python
+def _add_tools(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Tools Listed:**
+- Kali Linux
+- Nmap
+- SQLMap
+- WPScan
+- Gobuster/Dirb
+- Python 3
+- ReportLab
+
+### _add_scanning_phase()
+
+Adds reconnaissance phase findings (ports, services, directories).
+
+```python
+def _add_scanning_phase(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Contents:**
+- OS detection results
+- Open ports table with service versions
+- Directory enumeration results (up to 20 directories)
+
+### _add_bruteforce_phase()
+
+Adds WordPress brute force attack findings.
+
+```python
+def _add_bruteforce_phase(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Contents:**
+- WPScan enumeration results
+- Vulnerable plugins detected
+- Credentials obtained via brute force
+- Success/failure status
+
+### _add_sqli_phase()
+
+Adds SQL injection attack findings against DVWA.
+
+```python
+def _add_sqli_phase(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Contents:**
+- SQLMap injection process
+- Database dump results
+- SQL injection vulnerabilities found
+- Success/failure status
+
+### _add_credentials()
+
+Adds table of all extracted credentials.
+
+```python
+def _add_credentials(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Table Columns:**
+- Source (WordPress, SQLi, etc.)
+- Username
+- Password/Hash
+- Cracked status (SI/NO)
+
+### _add_risk_analysis()
+
+Adds comprehensive risk analysis and vulnerability details.
+
+```python
+def _add_risk_analysis(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Contents:**
+- Overall risk level
+- Vulnerability count by severity
+- Detailed vulnerability list with descriptions
+- Risk calculation methodology
+
+### _add_recommendations()
+
+Adds prioritized security recommendations.
+
+```python
+def _add_recommendations(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Recommendation Priorities:**
+- CRÍTICA (Critical)
+- ALTA (High)
+- MEDIA (Medium)
+- BAJA (Low)
+
+**Example Recommendations:**
+- Update WordPress and plugins
+- Implement prepared statements
+- Change compromised passwords
+- Enable 2FA
+- Install WAF (ModSecurity)
+
+### _add_conclusions()
+
+Adds final conclusions and report metadata.
+
+```python
+def _add_conclusions(self, story):
+```
+
+<ParamField path="story" type="list" required>
+  ReportLab story list to append elements to
+</ParamField>
+
+**Contents:**
+- Summary of findings
+- Risk assessment conclusion
+- Remediation urgency
+- Ethical hacking disclaimer
+- Generation timestamp
+
+## Usage Example
+
+```python
+from models.host import Host
+from models.vulnerability import Vulnerability, RiskLevel
+from reporter.pdf_generator import PDFReportGenerator
+
+# Create host object
+host = Host(ip="192.168.1.100")
+host.os_detection = "Linux 3.x"
+host.risk_level = RiskLevel.HIGH
+
+# Add ports
+host.ports_open = {
+    80: {
+        'state': 'open',
+        'service': 'http',
+        'product': 'Apache httpd',
+        'version': '2.4.41'
+    },
+    3306: {
+        'state': 'open',
+        'service': 'mysql',
+        'product': 'MySQL',
+        'version': '5.7.33'
+    }
+}
+
+# Add vulnerabilities
+vuln = Vulnerability(
+    name="SQL Injection",
+    description="DVWA vulnerable to SQL injection in id parameter",
+    risk=RiskLevel.CRITICAL,
+    recommendations="Use prepared statements"
+)
+host.vulnerabilities.append(vuln)
+
+# Add credentials
+host.credentials.append({
+    'source': 'SQLi - DVWA',
+    'user': 'admin',
+    'password': 'password123',
+    'cracked': True
+})
+
+# Generate PDF report
+generator = PDFReportGenerator(host)
+generator.generate()
+
+# Output file: outputs/REPORT_192_168_1_100_20260310_143022.pdf
+```
+
+## Report Structure
+
+The generated PDF contains the following sections in order:
+
+1. **Cover Page** - Audit overview and statistics
+2. **Index** - Table of contents
+3. **Executive Summary** - High-level findings
+4. **Methodology** - Audit process description
+5. **Tools Used** - Software and versions
+6. **Scanning Phase** - Reconnaissance results
+7. **Brute Force Phase** - WordPress attack findings
+8. **SQL Injection Phase** - DVWA attack findings
+9. **Credentials Extracted** - All compromised credentials
+10. **Risk Analysis** - Vulnerability assessment
+11. **Recommendations** - Prioritized remediation steps
+12. **Conclusions** - Final assessment
+
+## Page Layout
+
+- **Page Size:** A4
+- **Margins:** 2cm (top, bottom, left, right)
+- **Font:** Helvetica family
+- **Color Scheme:** Dark navy (`#1a1a2e`) and red accent (`#e94560`)

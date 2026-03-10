@@ -1,0 +1,170 @@
+---
+title: "Introduction"
+description: "Learn about the Ethical Audit Framework and its capabilities for security testing"
+---
+
+## What is Ethical Audit Framework?
+
+The Ethical Audit Framework is a comprehensive Python-based command-line tool designed for authorized penetration testing and security auditing. It orchestrates multiple industry-standard security tools into a unified workflow, providing automated vulnerability assessment, credential extraction, and professional reporting.
+
+<Warning>
+**Authorization Required** - This tool should only be used on systems you own or have explicit written permission to test. Unauthorized access to computer systems is illegal.
+</Warning>
+
+## Design Philosophy
+
+The framework is built around three core principles:
+
+1. **Automation** - Reduce manual effort by orchestrating multiple tools in a single workflow
+2. **Comprehensiveness** - Cover multiple attack vectors from reconnaissance to exploitation
+3. **Reporting** - Generate professional PDF reports with risk analysis and remediation guidance
+
+## Target Audience
+
+This framework is designed for:
+
+- **Security Professionals** conducting authorized penetration tests
+- **Students** learning ethical hacking and security assessment techniques
+- **System Administrators** auditing their own infrastructure
+- **Bug Bounty Hunters** performing structured security assessments
+
+## Key Capabilities
+
+### Multi-Phase Attack Workflow
+
+The framework executes security assessments in six distinct phases:
+
+<Steps>
+  <Step title="Reconnaissance">
+    Network scanning with Nmap to discover open ports, running services, and OS detection
+  </Step>
+  <Step title="Directory Enumeration">
+    Gobuster integration to discover hidden web directories and files
+  </Step>
+  <Step title="SQL Injection">
+    Automated SQLMap attacks against DVWA and custom endpoints with database dumping
+  </Step>
+  <Step title="WordPress Testing">
+    WPScan enumeration and brute-force attacks against WordPress installations
+  </Step>
+  <Step title="Hash Cracking">
+    MD5 hash cracking using dictionary attacks for extracted credentials
+  </Step>
+  <Step title="Risk Analysis">
+    Automated risk scoring and PDF report generation with remediation recommendations
+  </Step>
+</Steps>
+
+### Interactive CLI
+
+Built with the [Rich](https://rich.readthedocs.io/) library, the framework provides:
+
+- Color-coded terminal output for easy reading
+- Real-time progress indicators
+- Interactive menus for selecting attack modes
+- Formatted tables for displaying results
+- Confirmation prompts for destructive actions
+
+### Automated Reporting
+
+Every audit generates a professional PDF report containing:
+
+- Executive summary with risk level
+- Detailed findings for each vulnerability
+- Port scan results with service versions
+- Extracted credentials with crack status
+- Evidence files and command outputs
+- Remediation recommendations
+
+## Tool Integration
+
+The framework integrates with these industry-standard security tools:
+
+| Tool | Purpose | Required |
+|------|---------|----------|
+| **Nmap** | Network scanning and service enumeration | Yes |
+| **SQLMap** | SQL injection testing and exploitation | Yes |
+| **WPScan** | WordPress security scanner | Yes |
+| **Gobuster** | Directory/file brute-forcing | Yes |
+| **Python 3.x** | Framework runtime | Yes |
+
+## Use Cases
+
+### DVWA Testing Lab
+
+The framework is optimized for testing [Damn Vulnerable Web Application (DVWA)](http://www.dvwa.co.uk/), a PHP/MySQL web application designed for security testing education. It can:
+
+- Automatically log in to DVWA
+- Exploit SQL injection vulnerabilities
+- Dump user credentials from the database
+- Crack MD5 password hashes
+
+### WordPress Assessment
+
+For WordPress installations, the framework can:
+
+- Enumerate installed plugins and themes
+- Identify vulnerable components
+- Discover valid usernames
+- Perform brute-force attacks with rockyou.txt
+- Extract valid credentials
+
+### Network Reconnaissance
+
+Use the network discovery mode to:
+
+- Scan entire subnets for live hosts
+- Identify all open ports and services
+- Detect operating systems
+- Prioritize targets based on exposed services
+
+## Ethical Considerations
+
+<Warning>
+Using this framework improperly can result in:
+- Criminal prosecution under computer crime laws
+- Civil liability for damages
+- Loss of professional certifications
+- Damage to systems and data
+</Warning>
+
+Always follow these ethical guidelines:
+
+1. **Get Authorization** - Obtain written permission before testing
+2. **Define Scope** - Clearly document what systems can be tested
+3. **Avoid Damage** - Use non-destructive testing methods when possible
+4. **Protect Data** - Handle extracted data responsibly and securely
+5. **Report Responsibly** - Notify system owners of vulnerabilities promptly
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Set up the framework and install dependencies
+  </Card>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Run your first security audit
+  </Card>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/concepts/architecture"
+  >
+    Learn how the framework is structured
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration/settings"
+  >
+    Customize settings for your environment
+  </Card>
+</CardGroup>

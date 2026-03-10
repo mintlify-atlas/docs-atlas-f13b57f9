@@ -1,0 +1,179 @@
+---
+title: "NmapScanner"
+description: "Network and service discovery using Nmap"
+---
+
+## Class Definition
+
+```python
+class NmapScanner:
+    def __init__(self, target_ip)
+```
+
+Network scanner that performs comprehensive host discovery, port scanning, service detection, and OS fingerprinting using Nmap.
+
+## Constructor
+
+### `__init__(target_ip)`
+
+Initializes the NmapScanner with a target IP address.
+
+<ParamField path="target_ip" type="str" required>
+  The IP address of the target host to scan
+</ParamField>
+
+**Attributes:**
+- `target_ip` (str): Target IP address
+- `output_dir` (Path): Directory for storing scan results (`{Config.OUTPUT_BASE}/nmap`)
+
+**Example:**
+```python
+scanner = NmapScanner("192.168.56.101")
+```
+
+---
+
+## Methods
+
+### `full_scan()`
+
+Performs a comprehensive Nmap scan including service detection and OS fingerprinting.
+
+```python
+def full_scan(self) -> Host
+```
+
+**Scan Parameters:**
+- Ports: 1-1000 (top 1000 ports)
+- Arguments: `-sV -sC -O --top-ports 1000`
+  - `-sV`: Service version detection
+  - `-sC`: Default script scanning
+  - `-O`: OS detection
+
+<ResponseField name="return" type="Host">
+  A Host object containing:
+  - `ip`: Target IP address
+  - `os_detection`: Detected OS with accuracy percentage
+  - `ports_open`: Dictionary of open ports with service information
+</ResponseField>
+
+**Port Information Structure:**
+```python
+{
+    port_number: {
+        'state': 'open',
+        'service': 'http',
+        'version': '2.4.41',
+        'product': 'Apache httpd',
+        'extra': '(Ubuntu)'
+    }
+}
+```
+
+**Example:**
+```python
+scanner = NmapScanner("192.168.56.101")
+host = scanner.full_scan()
+
+print(f"OS: {host.os_detection}")
+for port, info in host.ports_open.items():
+    print(f"Port {port}: {info['service']} {info['version']}")
+```
+
+**Console Output:**
+```
+📡 Nmap Top 1000 + Servicios + OS Detection...
+🖥️  OS Detectado: Linux 3.X (95%)
+✅ 5 servicios detectados
+
+PORT         STATE      SERVICE         VERSION
+────────────────────────────────────────────────────────────
+21/tcp       open       ftp             vsftpd 2.3.4
+22/tcp       open       ssh             OpenSSH 7.9
+80/tcp       open       http            Apache httpd 2.4.41
+```
+
+---
+
+### `discover_network(network)`
+
+Static method to auto-discover active hosts in a network range.
+
+```python
+@staticmethod
+def discover_network(network='192.168.56.0/24') -> list[str]
+```
+
+<ParamField path="network" type="str" default="192.168.56.0/24">
+  Network range in CIDR notation (e.g., "192.168.1.0/24")
+</ParamField>
+
+**Scan Method:**
+- Uses `nmap -sn` (ping scan) for host discovery
+- Filters out gateway (.1) and network (.0) addresses
+- Timeout: 30 seconds
+
+<ResponseField name="return" type="list[str]">
+  List of discovered IP addresses in the network
+</ResponseField>
+
+**Example:**
+```python
+hosts = NmapScanner.discover_network('192.168.56.0/24')
+print(f"Found {len(hosts)} hosts: {hosts}")
+# Output: Found 3 hosts: ['192.168.56.101', '192.168.56.102', '192.168.56.103']
+```
+
+**Fallback Behavior:**
+If discovery fails (timeout, error), returns `[Config.DEFAULT_TARGET]` as fallback.
+
+---
+
+## Implementation Details
+
+### OS Detection Logic
+
+1. **Primary**: Uses `osmatch` field from Nmap results
+   ```python
+   os_matches = nm[target_ip].get('osmatch', [])
+   best = os_matches[0]
+   os_detection = f"{best.get('name')} ({best.get('accuracy')}%)"
+   ```
+
+2. **Fallback**: Uses `osclass` if osmatch unavailable
+   ```python
+   os_class = nm[target_ip].get('osclass', [])
+   os_detection = f"{oc.get('osfamily')} {oc.get('osgen')}"
+   ```
+
+### Service Detection
+
+Extracts detailed service information for each open port:
+```python
+service = nm[target_ip][proto][port]
+host.ports_open[int(port)] = {
+    'state': service['state'],
+    'service': service.get('name', 'unknown'),
+    'version': service.get('version', ''),
+    'product': service.get('product', ''),
+    'extra': service.get('extrainfo', '')
+}
+```
+
+---
+
+## Dependencies
+
+- `nmap`: Python library for Nmap integration
+- `pathlib.Path`: File system operations
+- `subprocess`: Network discovery execution
+- `config.Config`: Configuration settings
+- `models.host.Host`: Host data model
+- `rich.print`: Formatted console output
+
+---
+
+## Related
+
+- [Host Model](/api/models/host)
+- [Configuration](/api/config)

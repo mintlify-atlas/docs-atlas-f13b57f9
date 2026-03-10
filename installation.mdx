@@ -1,0 +1,267 @@
+---
+title: Installation
+description: Install and configure the Ethical Audit Framework on your system
+---
+
+## Prerequisites
+
+Before installing the Ethical Audit Framework, ensure you have the following:
+
+- Python 3.8 or higher
+- Linux operating system (tested on Ubuntu/Debian and Kali Linux)
+- Root or sudo privileges (required for security tools)
+- Internet connection for downloading dependencies
+
+## System Dependencies
+
+The framework relies on several security tools that must be installed separately:
+
+<Steps>
+  <Step title="Install Nmap">
+    Network scanner for reconnaissance and port scanning:
+    
+    ```bash
+    sudo apt update
+    sudo apt install nmap -y
+    ```
+    
+    Verify installation:
+    ```bash
+    nmap --version
+    ```
+  </Step>
+
+  <Step title="Install SQLMap">
+    Automated SQL injection tool:
+    
+    ```bash
+    sudo apt install sqlmap -y
+    ```
+    
+    Verify installation:
+    ```bash
+    sqlmap --version
+    ```
+  </Step>
+
+  <Step title="Install WPScan">
+    WordPress vulnerability scanner:
+    
+    ```bash
+    sudo apt install wpscan -y
+    ```
+    
+    Verify installation:
+    ```bash
+    wpscan --version
+    ```
+    
+    <Note>
+      WPScan requires an API token for vulnerability database access. Register at [wpscan.com](https://wpscan.com/) to get your free API token.
+    </Note>
+  </Step>
+
+  <Step title="Install Gobuster">
+    Directory and file enumeration tool:
+    
+    ```bash
+    sudo apt install gobuster -y
+    ```
+    
+    Verify installation:
+    ```bash
+    gobuster version
+    ```
+  </Step>
+
+  <Step title="Install Wordlists">
+    Required for brute-force attacks:
+    
+    ```bash
+    sudo apt install wordlists -y
+    ```
+    
+    The framework uses:
+    - `/usr/share/wordlists/rockyou.txt` - Password brute-forcing
+    - `/usr/share/wordlists/dirb/common.txt` - Directory enumeration
+    
+    <Note>
+      On some systems, you may need to extract rockyou.txt:
+      ```bash
+      sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+      ```
+    </Note>
+  </Step>
+</Steps>
+
+## Python Dependencies
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone <repository-url>
+    cd ethical-audit-framework
+    ```
+  </Step>
+
+  <Step title="Create Virtual Environment (Recommended)">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+  </Step>
+
+  <Step title="Install Python Packages">
+    The framework requires the following Python packages:
+    
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+    This installs:
+    - `rich>=13.0.0` - Terminal UI and formatting
+    - `python-nmap>=0.7.1` - Nmap Python interface
+    - `reportlab>=4.0.4` - PDF report generation
+    - `requests>=2.31.0` - HTTP requests
+    - `beautifulsoup4>=4.12.2` - HTML parsing
+    - `colorama>=0.4.6` - Cross-platform colored output
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Run the framework to verify all components are properly installed:
+
+```bash
+python3 main.py
+```
+
+You should see the Ethical Audit Framework banner and main menu:
+
+```
+╭─────────────────────────────────────────────────────────────╮
+│ 🛡️  ETHICAL AUDIT FRAMEWORK v2.0                           │
+│ 🔍 Reconnaissance │ 💉 SQLi │ 🔓 WordPress │ 📂 Gobuster │ 🔑 Hash Crack │
+│ Target: 192.168.56.102 │ Network: 192.168.56.0/24          │
+╰─────────────────────────────────────────────────────────────╯
+```
+
+## Directory Structure
+
+After installation, your directory should look like:
+
+```
+ethical-audit-framework/
+├── main.py              # Main entry point
+├── audit_engine.py      # Core audit orchestration
+├── config.py            # Configuration settings
+├── requirements.txt     # Python dependencies
+├── models/              # Data models
+├── services/            # Security tool integrations
+│   ├── nmap_scanner.py
+│   ├── sqlmap_inject.py
+│   ├── wpforce_brute.py
+│   ├── gobuster_enum.py
+│   ├── hash_cracker.py
+│   └── risk_analyzer.py
+├── reporter/            # Report generation
+│   └── pdf_generator.py
+└── outputs/            # Audit results (auto-created)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Permission Denied Errors">
+    Most security tools require root privileges. Run the framework with sudo:
+    
+    ```bash
+    sudo python3 main.py
+    ```
+    
+    Or configure sudo to allow specific commands without password prompts (advanced).
+  </Accordion>
+
+  <Accordion title="Wordlist Not Found">
+    If you see errors about missing wordlists:
+    
+    ```bash
+    # Install wordlists package
+    sudo apt install wordlists seclists -y
+    
+    # Extract rockyou.txt if compressed
+    sudo gunzip /usr/share/wordlists/rockyou.txt.gz
+    
+    # Verify files exist
+    ls -lh /usr/share/wordlists/rockyou.txt
+    ls -lh /usr/share/wordlists/dirb/common.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Python Module Import Errors">
+    Ensure you're using the correct Python version and virtual environment:
+    
+    ```bash
+    # Check Python version
+    python3 --version
+    
+    # Activate virtual environment
+    source venv/bin/activate
+    
+    # Reinstall dependencies
+    pip install -r requirements.txt --upgrade
+    ```
+  </Accordion>
+
+  <Accordion title="Nmap Command Not Found">
+    If python-nmap cannot find the nmap binary:
+    
+    ```bash
+    # Install nmap
+    sudo apt install nmap -y
+    
+    # Verify it's in PATH
+    which nmap
+    
+    # Test manually
+    nmap -V
+    ```
+  </Accordion>
+
+  <Accordion title="WPScan API Token Warning">
+    WPScan may show warnings without an API token. To configure:
+    
+    1. Register at [wpscan.com](https://wpscan.com/)
+    2. Get your API token
+    3. Configure WPScan:
+    
+    ```bash
+    wpscan --api-token YOUR_TOKEN_HERE --url http://example.com
+    ```
+    
+    The framework will still work without a token, but vulnerability data may be limited.
+  </Accordion>
+
+  <Accordion title="Outputs Directory Permission Issues">
+    The framework creates an `outputs/` directory automatically. If you encounter permission errors:
+    
+    ```bash
+    # Ensure write permissions
+    chmod 755 .
+    mkdir -p outputs
+    chmod 755 outputs
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  **Legal Notice**: This framework is designed for authorized security testing only. Ensure you have explicit permission before auditing any system. Unauthorized use may violate local, state, and federal laws.
+</Warning>
+
+## Next Steps
+
+Now that installation is complete:
+
+1. Review the [Quick Start Guide](/quickstart) to run your first audit
+2. Configure default targets in `config.py`
+3. Set up your test environment (DVWA, WordPress)

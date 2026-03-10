@@ -1,0 +1,156 @@
+---
+title: 'Host'
+description: 'Data model representing a target host and audit results'
+---
+
+## Overview
+
+The `Host` class is the central data model that stores all information discovered during a security audit, including open ports, vulnerabilities, credentials, and risk assessment.
+
+## Class Definition
+
+```python
+from typing import Dict, List
+from .vuln import Vulnerability, RiskLevel
+
+class Host:
+    def __init__(self, ip: str)
+```
+
+### Constructor Parameters
+
+<ParamField path="ip" type="str" required>
+  The IP address of the target host
+</ParamField>
+
+## Attributes
+
+<ResponseField name="ip" type="str">
+  The IP address of the target host
+</ResponseField>
+
+<ResponseField name="ports_open" type="Dict[int, dict]" default="{}">
+  Dictionary mapping port numbers to service information. Each port entry contains service details discovered during reconnaissance.
+  
+  **Structure:**
+  ```python
+  {
+    80: {"service": "http", "version": "Apache 2.4.41"},
+    22: {"service": "ssh", "version": "OpenSSH 7.6p1"}
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="vulnerabilities" type="List[Vulnerability]" default="[]">
+  List of `Vulnerability` objects discovered during the audit. Populated by SQL injection, WordPress scanning, and other attack modules.
+</ResponseField>
+
+<ResponseField name="credentials" type="List[dict]" default="[]">
+  List of credential dictionaries extracted during the audit.
+  
+  **Structure:**
+  ```python
+  [
+    {
+      "source": "DVWA SQL Dump",
+      "user": "admin",
+      "password": "5f4dcc3b5aa765d61d8327deb882cf99",
+      "cracked": True
+    }
+  ]
+  ```
+  
+  **Fields:**
+  - `source` (str): Where the credential was found
+  - `user` (str): Username
+  - `password` (str): Password hash or plaintext
+  - `cracked` (bool): Whether the hash was successfully cracked
+</ResponseField>
+
+<ResponseField name="directories" type="List[dict]" default="[]">
+  List of discovered web directories from Gobuster enumeration.
+  
+  **Structure:**
+  ```python
+  [
+    {"path": "/admin", "status": 200},
+    {"path": "/login.php", "status": 200}
+  ]
+  ```
+</ResponseField>
+
+<ResponseField name="os_detection" type="str" default="'No detectado'">
+  Operating system detected by Nmap, or "No detectado" if detection failed
+</ResponseField>
+
+<ResponseField name="risk_level" type="RiskLevel" default="RiskLevel.LOW">
+  Overall risk assessment calculated by `RiskAnalyzer`. See [RiskLevel enum](/api/vulnerability-model#risklevel) for possible values.
+</ResponseField>
+
+## Usage in Audit Pipeline
+
+The `Host` object is created during Phase 1 (Reconnaissance) and progressively populated:
+
+```python
+# Phase 1: Create Host with port scan results
+host = NmapScanner("192.168.1.100").full_scan()
+
+# Phase 2: Add directories
+host.directories = GobusterEnum(host).enumerate()
+
+# Phase 3-4: Add vulnerabilities
+host.vulnerabilities.extend(SQLMapInjector(host).attack())
+host.vulnerabilities.extend(WPForceBrute(host).attack())
+
+# Phase 5: Crack credential hashes
+if host.credentials:
+    HashCracker.crack_credentials(host.credentials)
+
+# Phase 6: Calculate risk
+RiskAnalyzer.analyze(host)
+```
+
+## Example
+
+```python
+from models.host import Host
+from models.vuln import Vulnerability, RiskLevel
+
+# Create a new host
+host = Host("192.168.1.100")
+
+# Add port information
+host.ports_open[80] = {"service": "http", "version": "nginx 1.18.0"}
+host.ports_open[22] = {"service": "ssh", "version": "OpenSSH 8.2p1"}
+
+# Add a vulnerability
+vuln = Vulnerability(
+    name="SQL Injection",
+    description="Database vulnerable to blind SQL injection",
+    port=80,
+    risk=RiskLevel.CRITICAL
+)
+host.vulnerabilities.append(vuln)
+
+# Add credentials
+host.credentials.append({
+    "source": "SQL Dump",
+    "user": "admin",
+    "password": "password123",
+    "cracked": True
+})
+
+# Set risk level
+host.risk_level = RiskLevel.CRITICAL
+
+# Access data
+print(f"Host: {host.ip}")
+print(f"Open ports: {list(host.ports_open.keys())}")
+print(f"Vulnerabilities: {len(host.vulnerabilities)}")
+print(f"Risk: {host.risk_level.value}")
+```
+
+## Related
+
+- [Vulnerability](/api/vulnerability-model) - Vulnerability data model
+- [AuditEngine](/api/audit-engine) - Uses Host to store audit results

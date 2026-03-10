@@ -1,0 +1,211 @@
+---
+title: Configuration Settings
+description: Configure default targets, credentials, wordlists, and application paths
+icon: gear
+---
+
+The Ethical Audit Framework uses a centralized configuration file (`config.py`) to manage all default settings, paths, and credentials used during security audits.
+
+## Configuration File Location
+
+All configuration settings are defined in:
+
+```
+source/config.py
+```
+
+## Default Target Settings
+
+<ParamField path="DEFAULT_TARGET" type="string" default="192.168.56.102">
+  The default IP address used when running audits without specifying a custom target. This is typically set to your primary vulnerable test machine (e.g., DVWA).
+</ParamField>
+
+<ParamField path="DEFAULT_NETWORK" type="string" default="192.168.56.0/24">
+  The default network range used for network discovery mode (option 2). Uses CIDR notation to specify the subnet to scan.
+</ParamField>
+
+<Tip>
+These defaults are used in options 1, 3, 4, and 5 of the main menu. Option 6 allows you to override these with a manual IP address.
+</Tip>
+
+## DVWA Settings
+
+Configuration for Damn Vulnerable Web Application (DVWA) attacks:
+
+<ParamField path="DVWA_LOGIN_URL" type="string" default="/dvwa/login.php">
+  URL path to the DVWA login page, used for authentication before launching attacks.
+</ParamField>
+
+<ParamField path="DVWA_SQLI_URL" type="string" default="/dvwa/vulnerabilities/sqli/">
+  URL path to the SQL injection vulnerability page in DVWA, used as the primary target for SQLMap attacks.
+</ParamField>
+
+<ParamField path="DVWA_DEFAULT_USER" type="string" default="admin">
+  Default username for DVWA authentication.
+</ParamField>
+
+<ParamField path="DVWA_DEFAULT_PASS" type="string" default="password">
+  Default password for DVWA authentication.
+</ParamField>
+
+<Warning>
+These credentials are for testing environments only. Never use default credentials in production systems.
+</Warning>
+
+## WordPress Configuration
+
+<ParamField path="WORDPRESS_PATHS" type="list" default="['/wordpress/', '/wp-login.php']">
+  List of common WordPress installation paths to check during reconnaissance. The framework tests these paths to detect WordPress installations.
+</ParamField>
+
+**Customization Example:**
+
+```python
+WORDPRESS_PATHS = [
+    '/wordpress/',
+    '/wp-login.php',
+    '/blog/',
+    '/wp/',
+    '/site/wp-login.php'
+]
+```
+
+## SQL Injection Endpoints
+
+<ParamField path="SQL_ENDPOINTS" type="list" default="['/?id=1', '/search.php?q=1', '/page.php?id=1']">
+  Generic fallback endpoints tested for SQL injection vulnerabilities when DVWA is not detected. These are common parameter patterns vulnerable to SQLi.
+</ParamField>
+
+**Customization Example:**
+
+```python
+SQL_ENDPOINTS = [
+    '/?id=1',
+    '/search.php?q=1',
+    '/page.php?id=1',
+    '/products.php?id=1',
+    '/article.php?id=1',
+    '/user.php?id=1'
+]
+```
+
+## Wordlist Paths
+
+<ParamField path="WORDLIST_PATH" type="string" default="/usr/share/wordlists/rockyou.txt">
+  Path to the wordlist used for WordPress brute-force attacks with WPScan. The rockyou.txt wordlist contains over 14 million passwords.
+</ParamField>
+
+<ParamField path="GOBUSTER_WORDLIST" type="string" default="/usr/share/wordlists/dirb/common.txt">
+  Path to the wordlist used for directory enumeration with Gobuster. The common.txt wordlist contains 4,614 common directory and file names.
+</ParamField>
+
+<Note>
+See the [Wordlists](/configuration/wordlists) page for detailed information on wordlist selection and custom configurations.
+</Note>
+
+## Common Passwords List
+
+<ParamField path="COMMON_PASSWORDS" type="list" default="27 common passwords">
+  A curated list of common passwords used for rapid hash cracking before attempting full wordlist attacks. This speeds up credential recovery for weak passwords.
+</ParamField>
+
+**Default Common Passwords:**
+
+```python
+COMMON_PASSWORDS = [
+    'password', 'admin', 'admin123', '123456', 'root', 'toor',
+    'letmein', 'welcome', 'monkey', 'dragon', 'master', 'qwerty',
+    'login', 'abc123', 'starwars', 'trustno1', 'iloveyou', 'shadow',
+    'superman', 'batman', '1234567890', 'password1', 'hello',
+    'charlie', 'donald', 'football', 'michael', 'passwd'
+]
+```
+
+**Adding Custom Passwords:**
+
+```python
+COMMON_PASSWORDS = [
+    'password', 'admin', 'admin123', '123456',
+    # Add organization-specific passwords
+    'company2024', 'welcome123', 'test1234'
+]
+```
+
+## Output Directory
+
+<ParamField path="OUTPUT_BASE" type="Path" default="outputs/">
+  Base directory for all audit output files. Created automatically if it doesn't exist. All scan results, reports, and artifacts are stored in timestamped subdirectories.
+</ParamField>
+
+## Customizing Settings
+
+To modify configuration settings:
+
+<Steps>
+  <Step title="Edit config.py">
+    Open the configuration file:
+    
+    ```bash
+    nano source/config.py
+    ```
+  </Step>
+  
+  <Step title="Update values">
+    Modify the desired settings:
+    
+    ```python
+    class Config:
+        # Update to your lab network
+        DEFAULT_TARGET = '10.0.0.50'
+        DEFAULT_NETWORK = '10.0.0.0/24'
+        
+        # Custom DVWA installation
+        DVWA_LOGIN_URL = '/vulnerable/login.php'
+        
+        # Custom wordlist location
+        WORDLIST_PATH = '/home/user/wordlists/custom.txt'
+    ```
+  </Step>
+  
+  <Step title="Save and restart">
+    Save the file and restart the framework for changes to take effect.
+  </Step>
+</Steps>
+
+<Warning>
+Always verify paths exist before running audits. Missing wordlists or incorrect paths will cause attacks to fail.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Target Configuration">
+    - Set `DEFAULT_TARGET` to your primary test VM
+    - Use `DEFAULT_NETWORK` matching your virtualization network (VirtualBox, VMware)
+    - Keep production networks out of default configurations
+  </Accordion>
+  
+  <Accordion title="Wordlist Management">
+    - Verify wordlist paths exist: `ls -lh /usr/share/wordlists/`
+    - Extract rockyou.txt if compressed: `gunzip /usr/share/wordlists/rockyou.txt.gz`
+    - Use smaller wordlists for faster testing during development
+  </Accordion>
+  
+  <Accordion title="Security Considerations">
+    - Never store real production credentials in config.py
+    - Keep config.py out of version control if it contains sensitive paths
+    - Use environment variables for sensitive data in production deployments
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Target Configuration" icon="crosshairs" href="/configuration/targets">
+    Learn about setting custom targets and network ranges
+  </Card>
+  
+  <Card title="Wordlist Configuration" icon="list" href="/configuration/wordlists">
+    Configure wordlists for brute-force and enumeration attacks
+  </Card>
+</CardGroup>

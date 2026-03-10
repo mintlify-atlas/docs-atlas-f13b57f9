@@ -1,0 +1,206 @@
+---
+title: "Network Scanning"
+description: "Nmap-based network discovery and port enumeration module"
+---
+
+## Overview
+
+The `NmapScanner` module provides comprehensive network reconnaissance capabilities using the Nmap security scanner. It performs host discovery, port enumeration, service detection, and operating system fingerprinting.
+
+<Warning>
+**Authorization Required**: Network scanning must only be performed on systems you own or have explicit written permission to test. Unauthorized scanning may violate laws including the Computer Fraud and Abuse Act (CFAA).
+</Warning>
+
+## Module Location
+
+```
+services/nmap_scanner.py
+```
+
+## Class Definition
+
+```python
+class NmapScanner:
+    def __init__(self, target_ip):
+        self.target_ip = target_ip
+        self.output_dir = Path(f"{Config.OUTPUT_BASE}/nmap")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+```
+
+The scanner initializes with a target IP address and creates an output directory for storing scan results at `{OUTPUT_BASE}/nmap/`.
+
+## Core Methods
+
+### full_scan()
+
+Performs a comprehensive port scan with service detection and OS fingerprinting.
+
+```python
+def full_scan(self):
+    nm = nmap.PortScanner()
+    rprint(f"   [cyan]📡 Nmap Top 1000 + Servicios + OS Detection...[/cyan]")
+    
+    nm.scan(self.target_ip, '1-1000', arguments='-sV -sC -O --top-ports 1000')
+    
+    host = Host(ip=self.target_ip)
+```
+
+**Scan Parameters:**
+- **Port Range**: 1-1000 (top 1000 most common ports)
+- **Arguments**: 
+  - `-sV`: Service version detection
+  - `-sC`: Run default NSE scripts
+  - `-O`: Operating system detection
+  - `--top-ports 1000`: Scan most common ports
+
+**Output Example:**
+
+```
+   📡 Nmap Top 1000 + Servicios + OS Detection...
+   🖥️  OS Detectado: Linux 3.2 - 4.9 (96%)
+   ✅ 5 servicios detectados
+
+   PORT         STATE      SERVICE         VERSION
+   ────────────────────────────────────────────────────────────
+   21/tcp       open       ftp             vsftpd 2.3.4
+   22/tcp       open       ssh             OpenSSH 4.7p1 Debian 8ubuntu1
+   80/tcp       open       http            Apache httpd 2.2.8
+   139/tcp      open       netbios-ssn     Samba smbd 3.X - 4.X
+   445/tcp      open       netbios-ssn     Samba smbd 3.0.20-Debian
+```
+
+#### OS Detection
+
+The module attempts OS fingerprinting using two methods:
+
+```python
+# Primary: OS Match
+os_matches = nm[self.target_ip].get('osmatch', [])
+if os_matches:
+    best = os_matches[0]
+    host.os_detection = f"{best.get('name', 'Unknown')} ({best.get('accuracy', '?')}%)"
+    rprint(f"   [green]🖥️  OS Detectado: {host.os_detection}[/green]")
+else:
+    # Fallback: OS Class
+    os_class = nm[self.target_ip].get('osclass', [])
+    if os_class:
+        oc = os_class[0]
+        host.os_detection = f"{oc.get('osfamily', '')} {oc.get('osgen', '')}"
+```
+
+#### Port Enumeration
+
+For each discovered port, the scanner extracts detailed service information:
+
+```python
+for proto in nm[self.target_ip].all_protocols():
+    ports = nm[self.target_ip][proto].keys()
+    for port in ports:
+        service = nm[self.target_ip][proto][port]
+        host.ports_open[int(port)] = {
+            'state': service['state'],
+            'service': service.get('name', 'unknown'),
+            'version': service.get('version', ''),
+            'product': service.get('product', ''),
+            'extra': service.get('extrainfo', '')
+        }
+```
+
+**Returned Host Object**: Contains `ip`, `os_detection`, and `ports_open` dictionary with full service details.
+
+### discover_network()
+
+Static method for automatic host discovery on a network segment.
+
+```python
+@staticmethod
+def discover_network(network='192.168.56.0/24'):
+    """Auto-descubrir hosts en la red"""
+    import subprocess
+    hosts = []
+    
+    rprint(f"\n[bold cyan]{'='*60}[/bold cyan]")
+    rprint(f"[bold cyan]🔍 NETWORK DISCOVERY: {network}[/bold cyan]")
+    rprint(f"[bold cyan]{'='*60}[/bold cyan]\n")
+    
+    try:
+        result = subprocess.run(
+            ['nmap', '-sn', network],
+            capture_output=True, text=True, timeout=30
+        )
+```
+
+**Command**: `nmap -sn 192.168.56.0/24`
+- `-sn`: Ping scan (no port scan)
+- Timeout: 30 seconds
+
+**Output Parsing:**
+
+```python
+for line in result.stdout.split('\n'):
+    if 'Nmap scan report for' in line:
+        parts = line.split()
+        ip = parts[-1].strip('()')
+        if ip.startswith('192.168.56.') and not ip.endswith('.1') and not ip.endswith('.0'):
+            hosts.append(ip)
+```
+
+Filters out network address (.0) and gateway (.1) automatically.
+
+**Example Output:**
+
+```
+============================================================
+🔍 NETWORK DISCOVERY: 192.168.56.0/24
+============================================================
+
+   ✅ 3 host(s) encontrados en 192.168.56.0/24
+   📌 192.168.56.101
+   📌 192.168.56.102
+   📌 192.168.56.103
+```
+
+## Usage Example
+
+```python
+from services.nmap_scanner import NmapScanner
+
+# Network discovery
+alive_hosts = NmapScanner.discover_network('192.168.1.0/24')
+
+# Scan each discovered host
+for target_ip in alive_hosts:
+    scanner = NmapScanner(target_ip)
+    host = scanner.full_scan()
+    
+    print(f"OS: {host.os_detection}")
+    print(f"Open Ports: {len(host.ports_open)}")
+    for port, info in host.ports_open.items():
+        print(f"  {port}/tcp: {info['service']} {info['version']}")
+```
+
+## Dependencies
+
+- **python-nmap**: Python wrapper for Nmap
+- **nmap**: Nmap command-line tool must be installed
+- **rich**: Terminal formatting library
+
+## Output Files
+
+Results are stored in:
+```
+{OUTPUT_BASE}/nmap/
+```
+
+## Security Considerations
+
+1. **Stealth**: The `-sV -sC -O` flags generate significant network traffic and are easily detected by IDS/IPS systems
+2. **Permissions**: OS detection (`-O`) requires root/administrator privileges
+3. **Firewall Evasion**: Does not implement evasion techniques; scans may be blocked by firewalls
+4. **Network Load**: Top 1000 ports scan can take several minutes on slow networks
+
+## Related Modules
+
+- **GobusterEnum**: Directory enumeration for discovered HTTP services
+- **SQLMapInjector**: SQL injection testing for web services
+- **WPForceBrute**: WordPress testing for detected CMS installations

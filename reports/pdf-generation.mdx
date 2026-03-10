@@ -1,0 +1,283 @@
+---
+title: "PDF Report Generation"
+description: "Comprehensive PDF security audit reports with ReportLab"
+---
+
+The framework generates professional PDF reports using the `PDFReportGenerator` class, which creates detailed security audit documentation with custom styling and structured sections.
+
+## PDFReportGenerator Class
+
+Location: `reporter/pdf_generator.py`
+
+The report generator creates comprehensive PDF documents that include all findings from the security audit.
+
+### Initialization
+
+```python
+from reporter.pdf_generator import PDFReportGenerator
+from models.host import Host
+
+host = Host(ip="192.168.56.102")
+generator = PDFReportGenerator(host)
+generator.generate()
+```
+
+The constructor automatically:
+- Generates a timestamp for the report
+- Creates the output filename in format: `REPORT_{ip}_{timestamp}.pdf`
+- Initializes ReportLab styles
+- Creates custom paragraph styles
+
+## Report Structure
+
+The PDF report follows a standardized structure with 10 main sections:
+
+### 1. Cover Page
+
+Displays key information about the audit target:
+- Report title: "INFORME DE AUDITORÍA DE SEGURIDAD INFORMÁTICA"
+- Framework version
+- Target IP address
+- Operating system detection
+- Risk level
+- Analysis date
+- Number of open ports
+- Number of vulnerabilities
+- Number of extracted credentials
+
+```python
+def _add_cover_page(self, story):
+    story.append(Paragraph("INFORME DE AUDITORÍA", self.styles['CoverTitle']))
+    # ...
+```
+
+### 2. Index
+
+Table of contents with all 10 sections listed.
+
+### 3. Executive Summary
+
+High-level overview including:
+- Audit scope and target
+- Key findings summary
+- Vulnerability counts by severity (critical, high, medium)
+- Overall risk level assessment
+- Number of exposed services and directories
+
+### 4. Methodology
+
+Describes the audit phases:
+- **Phase 1 - Reconnaissance**: Nmap scanning, OS detection, directory enumeration
+- **Phase 2 - Brute Force (WordPress)**: WPScan user enumeration and password attacks
+- **Phase 3 - SQL Injection**: SQLMap detection and exploitation on DVWA
+- **Phase 4 - Risk Analysis**: Global risk evaluation
+- **Phase 5 - Report**: Documentation and recommendations
+
+### 5. Tools Used
+
+Table of all security tools with versions:
+- Kali Linux
+- Nmap (port/service scanning)
+- SQLMap (SQL injection)
+- WPScan (WordPress auditing)
+- Gobuster/Dirb (directory enumeration)
+- Python 3 (automation framework)
+- ReportLab (PDF generation)
+
+### 6. Scanning Phase (Reconnaissance)
+
+**6.1 OS Detection**
+- Detected operating system with accuracy percentage
+- Target IP confirmation
+
+**6.2 Ports and Services**
+- Table with all open ports
+- Columns: Port, State, Service, Version
+- Color-coded by state
+
+**6.3 Directory Enumeration**
+- Table of discovered web directories
+- Columns: Directory, HTTP Code, Accessibility
+- Shows up to 20 directories
+
+### 7. Brute Force Phase (WordPress)
+
+- WPScan enumeration process
+- User discovery results
+- Plugin vulnerability detection
+- Brute force attack results with rockyou.txt
+- Extracted credentials table
+
+### 8. SQL Injection Phase (DVWA)
+
+- DVWA login process
+- SQLMap injection testing
+- Database dump results
+- MD5 hash extraction
+- Table of dumped credentials
+
+### 9. Extracted Credentials
+
+Critical section displaying all compromised credentials:
+- Table columns: Source, User, Password/Hash, Cracked status
+- Impact analysis
+- Access implications
+
+### 10. Risk Analysis
+
+**8.1 Risk Summary Table**
+- Severity levels: CRITICAL, HIGH, MEDIUM, LOW
+- Vulnerability counts per level
+- Color-coded backgrounds
+
+**8.2 Detailed Vulnerabilities**
+- Numbered list of all findings
+- Each entry includes:
+  - Risk level (color-coded)
+  - Vulnerability name
+  - Description
+  - Recommendations
+
+### 11. Security Recommendations
+
+Prioritized table of remediation steps:
+- **CRITICAL**: WordPress updates, prepared statements, password changes
+- **HIGH**: 2FA implementation, WAF deployment
+- **MEDIUM**: MySQL access restrictions, rate limiting
+- **LOW**: Periodic audits, log monitoring
+
+### 12. Conclusions
+
+Final assessment including:
+- Overall security posture
+- Key findings summary
+- Urgency of recommended actions
+- Ethical hacking disclosure
+
+## Color Scheme
+
+The report uses a consistent color palette defined in `pdf_generator.py:14-18`:
+
+```python
+DARK_BG = HexColor('#1a1a2e')        # Headers and titles
+ACCENT = HexColor('#e94560')         # Dividers and critical items
+LIGHT_BG = HexColor('#f5f5f5')       # Alternate table rows
+SUCCESS_GREEN = HexColor('#27ae60')  # Positive results
+WARNING_ORANGE = HexColor('#f39c12') # Warnings
+```
+
+## Custom Styles
+
+The report defines 7 custom paragraph styles:
+
+| Style | Font Size | Use Case |
+|-------|-----------|----------|
+| `CoverTitle` | 24pt | Report cover page |
+| `CoverSubtitle` | 14pt | Framework version, metadata |
+| `SectionTitle` | 16pt | Main section headers |
+| `SubSection` | 12pt | Subsection headers |
+| `BodyText` | 10pt | Standard paragraphs |
+| `AlertCritical` | 10pt | Critical vulnerability warnings |
+| `AlertSuccess` | 10pt | Positive security findings |
+
+## Generated Filename Format
+
+The PDF report is saved with a standardized naming convention:
+
+```
+REPORT_{ip_with_underscores}_{timestamp}.pdf
+```
+
+**Examples:**
+```
+REPORT_192_168_56_102_20240315_143022.pdf
+REPORT_10_0_0_15_20240315_091545.pdf
+```
+
+Location: `reporter/pdf_generator.py:25`
+
+```python
+self.filename = Path(f"outputs/REPORT_{host.ip.replace('.', '_')}_{self.timestamp}.pdf")
+```
+
+## Report Generation
+
+To generate the complete report:
+
+```python
+def generate(self):
+    doc = SimpleDocTemplate(
+        str(self.filename), pagesize=A4,
+        topMargin=2*cm, bottomMargin=2*cm,
+        leftMargin=2*cm, rightMargin=2*cm
+    )
+    story = []
+    
+    # Add all sections
+    self._add_cover_page(story)
+    self._add_index(story)
+    self._add_executive_summary(story)
+    # ... all other sections ...
+    
+    doc.build(story)
+```
+
+## Conditional Content
+
+The report adapts based on findings:
+
+### When No Vulnerabilities Found
+
+Sections display success messages in green:
+
+```
+✅ Resultado: No se detectaron puertos abiertos. 
+El sistema no presenta servicios expuestos.
+```
+
+### When Vulnerabilities Detected
+
+Sections display critical alerts in red:
+
+```
+⚠ VULNERABILIDADES ENCONTRADAS EN WORDPRESS
+```
+
+## Tables and Formatting
+
+All tables use consistent styling:
+- Header row: dark background (#1a1a2e) with white text
+- Alternating row colors for readability
+- Grid lines in light gray (#cccccc)
+- Proper padding for cells
+
+## Dependencies
+
+Required ReportLab imports:
+
+```python
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, 
+                                 Table, TableStyle, PageBreak, HRFlowable)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.lib.colors import black, red, white, HexColor
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+```
+
+## Output Location
+
+All PDF reports are saved to:
+
+```
+outputs/REPORT_*.pdf
+```
+
+Confirmed by the footer text in conclusions section (`pdf_generator.py:607`):
+
+```python
+Paragraph(
+    "<i>Toda la evidencia recopilada se encuentra en el directorio outputs/</i>",
+    self.styles['BodyText']
+)
+```

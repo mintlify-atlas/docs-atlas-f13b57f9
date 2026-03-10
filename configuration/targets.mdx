@@ -1,0 +1,428 @@
+---
+title: Target Configuration
+description: Configure IP addresses, network ranges, and target selection workflows
+icon: crosshairs
+---
+
+The Ethical Audit Framework supports multiple methods for specifying attack targets, from single IP addresses to entire network ranges with automatic discovery.
+
+## Target Types
+
+The framework supports two primary target configurations:
+
+<CardGroup cols={2}>
+  <Card title="Single IP Address" icon="bullseye">
+    Target a specific host with a known IP address
+  </Card>
+  
+  <Card title="Network Range" icon="network-wired">
+    Scan and attack multiple hosts in a subnet
+  </Card>
+</CardGroup>
+
+## Default Target Settings
+
+Default targets are configured in `source/config.py`:
+
+```python
+class Config:
+    DEFAULT_TARGET = '192.168.56.102'
+    DEFAULT_NETWORK = '192.168.56.0/24'
+```
+
+<ParamField path="DEFAULT_TARGET" type="string" default="192.168.56.102">
+  Primary IP address used for single-target audits (menu options 1, 3, 4, 5)
+</ParamField>
+
+<ParamField path="DEFAULT_NETWORK" type="string" default="192.168.56.0/24">
+  Default network range for discovery mode (menu option 2), specified in CIDR notation
+</ParamField>
+
+## Target Selection Methods
+
+### Method 1: Use Default Target
+
+Options 1, 3, 4, and 5 use the `DEFAULT_TARGET` IP address automatically:
+
+<Tabs>
+  <Tab title="Option 1">
+    **Full Audit (Default Target)**
+    
+    ```
+    Option 1: Full Audit (DVWA + WordPress)
+    Target: 192.168.56.102 (from DEFAULT_TARGET)
+    ```
+    
+    Launches complete audit against the configured default target.
+  </Tab>
+  
+  <Tab title="Option 3">
+    **Reconnaissance Only**
+    
+    ```
+    Option 3: Reconnaissance + Directories
+    Prompt: IP for scan [default: 192.168.56.102]
+    ```
+    
+    Offers default but allows override via prompt.
+  </Tab>
+  
+  <Tab title="Option 4">
+    **SQL Injection**
+    
+    ```
+    Option 4: SQL Injection (DVWA)
+    Prompt: DVWA target IP [default: 192.168.56.102]
+    ```
+    
+    Targets DVWA installation on default or custom IP.
+  </Tab>
+  
+  <Tab title="Option 5">
+    **WordPress Attack**
+    
+    ```
+    Option 5: WordPress Brute-Force
+    Prompt: WordPress target IP [default: 192.168.56.102]
+    ```
+    
+    Targets WordPress installation on default or custom IP.
+  </Tab>
+</Tabs>
+
+### Method 2: Network Discovery Mode
+
+Option 2 performs automatic network discovery and sequential attacks:
+
+```python
+# From main.py line 62-72
+elif choice == "2":
+    # Auto-discover network
+    network = Prompt.ask("Network to scan", default=Config.DEFAULT_NETWORK)
+    hosts = NmapScanner.discover_network(network)
+
+    if hosts:
+        for ip in hosts:
+            if Confirm.ask(f"Attack {ip}?", default=True):
+                AuditEngine(ip).run_full_audit()
+```
+
+<Steps>
+  <Step title="Network scan">
+    Nmap discovers all active hosts in the specified network range
+  </Step>
+  
+  <Step title="Host enumeration">
+    Framework presents each discovered IP address
+  </Step>
+  
+  <Step title="Interactive confirmation">
+    User confirms whether to attack each host (default: Yes)
+  </Step>
+  
+  <Step title="Sequential audits">
+    Full audit runs against each confirmed target
+  </Step>
+</Steps>
+
+**Example Workflow:**
+
+```
+Network to scan: 192.168.56.0/24
+
+[*] Discovered hosts:
+    - 192.168.56.1
+    - 192.168.56.102
+    - 192.168.56.105
+
+Attack 192.168.56.1? [Y/n]: n
+Attack 192.168.56.102? [Y/n]: Y
+  [+] Running full audit against 192.168.56.102...
+Attack 192.168.56.105? [Y/n]: Y
+  [+] Running full audit against 192.168.56.105...
+```
+
+### Method 3: Manual IP Input
+
+Option 6 allows complete manual control over the target IP:
+
+```python
+# From main.py line 124-128
+elif choice == "6":
+    # Manual IP
+    ip = Prompt.ask("Target IP")
+    rprint(f"\n[bold green]Full audit against {ip}[/bold green]")
+    AuditEngine(ip).run_full_audit()
+```
+
+<Note>
+This is the recommended method when targeting non-default IPs or when you need full control over the target selection.
+</Note>
+
+**Example:**
+
+```
+Select option: 6
+Target IP: 10.0.0.50
+
+Full audit against 10.0.0.50
+[+] Starting reconnaissance...
+```
+
+## IP Address vs Network Ranges
+
+<Tabs>
+  <Tab title="Single IP">
+    **Format:** `192.168.1.100`
+    
+    **Use cases:**
+    - Known vulnerable machine
+    - Specific target for focused testing
+    - CTF challenges with provided IP
+    - Individual VM in lab environment
+    
+    **Menu options:** 1, 3, 4, 5, 6
+    
+    ```python
+    # config.py
+    DEFAULT_TARGET = '192.168.56.102'
+    ```
+  </Tab>
+  
+  <Tab title="Network Range (CIDR)">
+    **Format:** `192.168.1.0/24`
+    
+    **Use cases:**
+    - Lab environment with multiple VMs
+    - Discovering unknown targets
+    - Red team exercises
+    - Testing multiple vulnerable applications
+    
+    **Menu option:** 2 (Auto-Discovery)
+    
+    ```python
+    # config.py
+    DEFAULT_NETWORK = '192.168.56.0/24'
+    ```
+    
+    **Common CIDR ranges:**
+    - `/24` = 256 addresses (192.168.1.0 - 192.168.1.255)
+    - `/16` = 65,536 addresses (192.168.0.0 - 192.168.255.255)
+    - `/8` = 16,777,216 addresses (10.0.0.0 - 10.255.255.255)
+  </Tab>
+</Tabs>
+
+## Customizing Targets
+
+### Option A: Update Default Configuration
+
+Edit `source/config.py` for permanent changes:
+
+```python
+class Config:
+    # VirtualBox host-only network
+    DEFAULT_TARGET = '192.168.56.102'
+    DEFAULT_NETWORK = '192.168.56.0/24'
+    
+    # For VMware network:
+    # DEFAULT_TARGET = '192.168.183.130'
+    # DEFAULT_NETWORK = '192.168.183.0/24'
+    
+    # For custom lab:
+    # DEFAULT_TARGET = '10.0.0.50'
+    # DEFAULT_NETWORK = '10.0.0.0/24'
+```
+
+### Option B: Use Menu Prompts
+
+Override defaults without editing config.py:
+
+<AccordionGroup>
+  <Accordion title="Option 3: Reconnaissance">
+    ```
+    IP for scan [192.168.56.102]: 10.0.0.50
+    ```
+    Enter custom IP when prompted (or press Enter for default)
+  </Accordion>
+  
+  <Accordion title="Option 4: SQL Injection">
+    ```
+    DVWA target IP [192.168.56.102]: 192.168.1.50
+    ```
+    Specify custom DVWA host IP
+  </Accordion>
+  
+  <Accordion title="Option 5: WordPress">
+    ```
+    WordPress target IP [192.168.56.102]: 172.16.0.10
+    ```
+    Specify custom WordPress host IP
+  </Accordion>
+  
+  <Accordion title="Option 6: Manual Audit">
+    ```
+    Target IP: 203.0.113.50
+    ```
+    No default provided - full manual entry
+  </Accordion>
+</AccordionGroup>
+
+## Multiple Target Workflows
+
+### Workflow 1: Sequential Manual Audits
+
+Audit multiple targets one at a time:
+
+```
+1. Run option 6 (Manual IP)
+2. Enter first target: 192.168.56.102
+3. Wait for audit completion
+4. When prompted "Another audit?", select Yes
+5. Run option 6 again
+6. Enter second target: 192.168.56.105
+7. Repeat as needed
+```
+
+### Workflow 2: Automated Network Discovery
+
+Discover and attack all targets in a subnet:
+
+```
+1. Run option 2 (Auto-Discovery)
+2. Enter network: 192.168.56.0/24
+3. Framework discovers all hosts
+4. Confirm/skip each discovered target
+5. All confirmed targets audited sequentially
+```
+
+### Workflow 3: Targeted Attack Campaign
+
+Combine approaches for comprehensive coverage:
+
+```bash
+# Phase 1: Network discovery
+Option 2 → Discover 192.168.56.0/24
+  → Found: .102, .105, .110
+
+# Phase 2: Focused attacks
+Option 4 → SQL injection on 192.168.56.102 (DVWA)
+Option 5 → WordPress brute-force on 192.168.56.105
+Option 3 → Reconnaissance on 192.168.56.110
+
+# Phase 3: Full audit on interesting targets
+Option 6 → Full audit on 192.168.56.105
+```
+
+## Network Adapter Configuration
+
+Ensure your attack machine can reach the targets:
+
+<Tabs>
+  <Tab title="VirtualBox">
+    **Host-Only Adapter:**
+    
+    ```
+    Attacker VM: 192.168.56.101
+    Target VM:   192.168.56.102
+    Network:     192.168.56.0/24
+    ```
+    
+    **Configuration:**
+    - VirtualBox → Tools → Network Manager
+    - Create/verify host-only network
+    - Assign to both VMs
+    
+    **Verification:**
+    ```bash
+    ping 192.168.56.102
+    ```
+  </Tab>
+  
+  <Tab title="VMware">
+    **Custom Network:**
+    
+    ```
+    Attacker VM: 192.168.183.129
+    Target VM:   192.168.183.130
+    Network:     192.168.183.0/24
+    ```
+    
+    **Configuration:**
+    - Edit → Virtual Network Editor
+    - Add VMnet (e.g., VMnet8)
+    - Assign to both VMs
+    
+    **Verification:**
+    ```bash
+    ping 192.168.183.130
+    ```
+  </Tab>
+  
+  <Tab title="Physical Lab">
+    **Isolated Network:**
+    
+    ```
+    Attacker:    10.0.0.10
+    Target 1:    10.0.0.50
+    Target 2:    10.0.0.51
+    Network:     10.0.0.0/24
+    Gateway:     10.0.0.1
+    ```
+    
+    **Requirements:**
+    - Isolated switch/router
+    - No internet connectivity
+    - Static IP assignments
+    
+    **Verification:**
+    ```bash
+    nmap -sn 10.0.0.0/24
+    ```
+  </Tab>
+</Tabs>
+
+## Verification and Testing
+
+Before running audits, verify target connectivity:
+
+```bash
+# Test single target
+ping -c 4 192.168.56.102
+
+# Verify network range
+nmap -sn 192.168.56.0/24
+
+# Check HTTP service
+curl -I http://192.168.56.102
+
+# Verify SSH access
+nc -zv 192.168.56.102 22
+```
+
+<Warning>
+**Legal and Ethical Considerations**
+
+Only audit systems you own or have explicit written permission to test:
+
+- Personal lab environments (VirtualBox, VMware)
+- Intentionally vulnerable VMs (DVWA, Metasploitable)
+- Authorized penetration testing engagements
+- CTF platforms and challenges
+
+**Never** run these tools against:
+- Production systems without authorization
+- Third-party networks
+- Internet-facing targets you don't own
+</Warning>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Configuration Settings" icon="gear" href="/configuration/settings">
+    Configure default targets and credentials
+  </Card>
+  
+  <Card title="Reconnaissance" icon="radar" href="/modules/network-scanning">
+    Learn about Nmap scanning and discovery
+  </Card>
+</CardGroup>

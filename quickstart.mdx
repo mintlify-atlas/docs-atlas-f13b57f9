@@ -1,80 +1,329 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Run your first security audit with the Ethical Audit Framework"
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before starting, ensure you have:
 
-### Step 1: Set up your local environment
+- Completed the [installation](/installation) process
+- All dependencies installed (Nmap, SQLMap, WPScan, Gobuster)
+- A test target system (DVWA recommended for learning)
+- Proper authorization to test the target system
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Warning>
+**Authorization Required** - Only test systems you own or have explicit written permission to test. Unauthorized testing is illegal.
+</Warning>
 
-### Step 2: Deploy your changes
+## Running Your First Audit
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+### Step 1: Launch the Framework
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Navigate to the framework directory and run the main script:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+```bash
+cd Ethical_Audit_Framework
+sudo python3 main.py
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Root privileges are required for Nmap OS detection and some port scanning features.
 </Note>
+
+### Step 2: Select an Attack Mode
+
+The interactive menu presents six attack options:
+
+<Steps>
+  <Step title="Full Audit (DVWA + WordPress)">
+    **Option 1**: Complete security assessment against the default target (192.168.56.102)
+    
+    Tools: Nmap + Gobuster + SQLMap + WPScan + Hash Cracker
+  </Step>
+  
+  <Step title="Auto-Discover Network + Audit">
+    **Option 2**: Scan a subnet to discover live hosts, then audit each one
+    
+    Default network: 192.168.56.0/24
+  </Step>
+  
+  <Step title="Reconnaissance Only">
+    **Option 3**: Network scanning and directory enumeration without exploitation
+    
+    Tools: Nmap + Gobuster
+  </Step>
+  
+  <Step title="SQL Injection Only">
+    **Option 4**: Targeted SQLMap attack against DVWA with hash cracking
+    
+    Tools: SQLMap + Hash Cracker
+  </Step>
+  
+  <Step title="WordPress Brute-Force Only">
+    **Option 5**: WordPress vulnerability scan and credential brute-force
+    
+    Tools: WPScan with rockyou.txt
+  </Step>
+  
+  <Step title="Custom Target Full Audit">
+    **Option 6**: Run complete audit against a manually specified IP address
+    
+    You'll be prompted to enter the target IP
+  </Step>
+</Steps>
+
+## Example: Running a Full Audit
+
+Let's walk through a complete audit against the default DVWA target:
+
+### 1. Select Option 1
+
+```
+┌─────────────────────────────────────────┐
+│  Selecciona opción: 1                   │
+└─────────────────────────────────────────┘
+```
+
+### 2. Audit Phases
+
+The framework executes six phases automatically:
+
+<Accordion title="Phase 1: Reconnaissance (Nmap)">
+```
+🔍 FASE 1: RECONOCIMIENTO (Nmap)
+📡 Nmap Top 1000 + Servicios + OS Detection...
+🖥️  OS Detectado: Linux 3.2 - 4.9 (96%)
+✅ 5 servicios detectados
+
+PORT       STATE      SERVICE         VERSION
+22/tcp     open       ssh             OpenSSH 7.4
+80/tcp     open       http            Apache httpd 2.4.41
+3306/tcp   open       mysql           MySQL 5.7.33
+```
+</Accordion>
+
+<Accordion title="Phase 2: Directory Enumeration (Gobuster)">
+```
+📂 FASE 2: DIRECTORIOS (Gobuster)
+🔎 Gobuster: http://192.168.56.102:80/
+
+[+] /dvwa (Status: 200)
+[+] /wordpress (Status: 301)
+[+] /config (Status: 403)
+✅ 15 directorios encontrados
+```
+</Accordion>
+
+<Accordion title="Phase 3: SQL Injection (SQLMap)">
+```
+💉 FASE 3: SQL INJECTION (DVWA)
+🔑 Login DVWA OK (PHPSESSID=abc12345...)
+🎯 SQLMap DVWA: http://192.168.56.102:80/dvwa/vulnerabilities/sqli/?id=1
+
+💥 SQLi CRÍTICO + DUMP EXITOSO!
+
+🔑 5 CREDENCIALES EXTRAÍDAS:
+   👤 admin : 5f4dcc3b5aa765d61d8327deb882cf99
+   👤 gordonb : e99a18c428cb38d5f260853678922e03
+   👤 pablo : 0d107d09f5bbe40cade3de5c71e9e9b7
+```
+</Accordion>
+
+<Accordion title="Phase 4: WordPress Testing (WPScan)">
+```
+🔓 FASE 4: WORDPRESS (WPScan)
+🔍 WPScan enumerar: http://192.168.56.102:80/wordpress/
+👥 Usuarios encontrados: admin, editor
+
+🔐 Brute-force con rockyou.txt...
+🔑 CREDENCIAL: admin : password123
+```
+</Accordion>
+
+<Accordion title="Phase 5: Hash Cracking">
+```
+🔓 FASE 5: CRACKEO HASHES (MD5)
+✅ CRACKED: admin → 5f4dcc3b5aa765... = 'password'
+✅ CRACKED: pablo → 0d107d09f5bbe40... = 'letmein'
+❌ No crackeado: gordonb → e99a18c428cb38d...
+✅ 2 hash(es) crackeados
+```
+</Accordion>
+
+<Accordion title="Phase 6: Risk Analysis">
+```
+🎯 ANÁLISIS DE RIESGO
+🎯 RIESGO: 🔴 CRÍTICO (Score: 78/100)
+
+Factores:
+- 2 vulnerabilidades críticas (60 pts)
+- 3 puertos peligrosos expuestos (24 pts)
+- 2 servicios HTTP (20 pts)
+```
+</Accordion>
+
+### 3. Credentials Summary
+
+After all phases complete, the framework displays extracted credentials:
+
+```
+🔑 CREDENCIALES EXTRAÍDAS: 7
+
+FUENTE                  USUARIO          CONTRASEÑA
+─────────────────────────────────────────────────────────
+SQLMap (DVWA)          admin            password ✅
+SQLMap (DVWA)          pablo            letmein ✅
+SQLMap (DVWA)          gordonb          e99a18c428... 🔒
+WPScan Brute-Force     admin            password123 ✅
+```
+
+### 4. PDF Report Generation
+
+```
+📄 GENERANDO REPORTE PDF
+📁 Guardado: outputs/REPORT_192_168_56_102_20260310_143052.pdf
+```
+
+### 5. Audit Complete
+
+```
+✅ AUDITORÍA TERMINADA!
+
+📊 Puertos abiertos:     5
+📂 Directorios:          15
+🐛 Vulnerabilidades:     4
+🔑 Credenciales:         7
+🎯 Riesgo:               🔴 CRÍTICO
+📁 Resultados:           outputs/
+📄 Reporte PDF:          outputs/REPORT_192_168_56_102_*.pdf
+```
+
+## Understanding the Output
+
+### Output Directory Structure
+
+All results are saved to the `outputs/` directory:
+
+```
+outputs/
+├── REPORT_192_168_56_102_20260310_143052.pdf  # Final audit report
+├── nmap/
+│   └── 192.168.56.102_scan.txt                 # Nmap scan results
+├── sqlmap/
+│   └── sql_192.168.56.102_80/
+│       ├── dvwa/dump/dvwa/users.csv            # Dumped credentials
+│       └── sqlmap_full_output.txt              # Complete SQLMap output
+├── wpscan/
+│   ├── wpscan_192.168.56.102_80.txt            # WPScan enumeration
+│   └── brute_192.168.56.102_80.txt             # Brute-force results
+└── gobuster/
+    └── dirs_192.168.56.102_80.txt              # Directory enumeration
+```
+
+### Risk Levels
+
+The framework calculates risk based on:
+
+| Risk Level | Score Range | Indicators |
+|------------|-------------|------------|
+| 🟢 **LOW** | 0-9 | Few open ports, no critical vulns |
+| 🟡 **MEDIUM** | 10-29 | Some dangerous ports, minor vulns |
+| 🟠 **HIGH** | 30-59 | Multiple dangerous ports, HTTP exposed |
+| 🔴 **CRITICAL** | 60+ | Critical vulns, SQL injection, weak credentials |
+
+## Common Configuration
+
+### Changing the Default Target
+
+Edit `config.py` to set your default target:
+
+```python config.py
+DEFAULT_TARGET = '192.168.1.100'  # Your target IP
+DEFAULT_NETWORK = '192.168.1.0/24'  # Your network range
+```
+
+### DVWA Credentials
+
+If your DVWA uses different credentials:
+
+```python config.py
+DVWA_DEFAULT_USER = 'myuser'
+DVWA_DEFAULT_PASS = 'mypassword'
+```
+
+See the [Configuration Guide](/configuration/settings) for all options.
+
+## Troubleshooting
+
+<Accordion title="Target not responding">
+**Issue**: No services detected or connection timeout
+
+**Solutions**:
+1. Verify target IP is correct and reachable: `ping 192.168.56.102`
+2. Check firewall rules on target system
+3. Ensure target is powered on (for VMs)
+4. Verify network configuration matches your environment
+</Accordion>
+
+<Accordion title="SQLMap: No injection found">
+**Issue**: SQLMap doesn't detect vulnerability
+
+**Possible reasons**:
+1. DVWA security level is too high (should be "low")
+2. Cookie authentication failed - check DVWA_DEFAULT_USER/PASS
+3. Target URL is incorrect - verify /dvwa/vulnerabilities/sqli/ exists
+4. WAF or IPS is blocking SQLMap signatures
+</Accordion>
+
+<Accordion title="WPScan: WordPress not found">
+**Issue**: WPScan can't locate WordPress installation
+
+**Solutions**:
+1. Verify WordPress is installed at /wordpress/ or /wp-login.php
+2. Update `WORDPRESS_PATHS` in config.py if using custom path
+3. Check that port 80/443 is open and responding
+4. Ensure WordPress is fully configured (not showing setup page)
+</Accordion>
+
+<Accordion title="Permission denied errors">
+**Issue**: Tools fail with permission errors
+
+**Solution**: Run with sudo for Nmap OS detection and low-port scanning:
+```bash
+sudo python3 main.py
+```
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/concepts/architecture"
+  >
+    Understand the framework architecture and workflow
+  </Card>
+  <Card
+    title="Attack Modules"
+    icon="crosshairs"
+    href="/modules/network-scanning"
+  >
+    Learn about individual attack modules in detail
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/configuration/settings"
+  >
+    Customize settings for your environment
+  </Card>
+  <Card
+    title="PDF Reports"
+    icon="file-pdf"
+    href="/reports/pdf-generation"
+  >
+    Understand the generated security reports
+  </Card>
+</CardGroup>
