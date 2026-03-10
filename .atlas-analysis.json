@@ -1,0 +1,111 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Ethical Audit Framework",
+  "projectDescription": "A comprehensive CLI security auditing tool that orchestrates penetration testing attacks including network scanning, SQL injection, WordPress brute-force, and automated reporting",
+  "theme": "aspen",
+  "primaryColor": "#e94560",
+  "lightColor": "#ff6b81",
+  "darkColor": "#c23648",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/audit-engine",
+              "concepts/risk-analysis"
+            ]
+          },
+          {
+            "group": "Attack Modules",
+            "pages": [
+              "modules/network-scanning",
+              "modules/sql-injection",
+              "modules/wordpress-testing",
+              "modules/directory-enumeration",
+              "modules/hash-cracking"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/settings",
+              "configuration/targets",
+              "configuration/wordlists"
+            ]
+          },
+          {
+            "group": "Reports",
+            "pages": [
+              "reports/pdf-generation",
+              "reports/output-files"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/audit-engine",
+              "api/host-model",
+              "api/vulnerability-model"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/nmap-scanner",
+              "api/services/sqlmap-injector",
+              "api/services/wpforce-brute",
+              "api/services/gobuster-enum",
+              "api/services/hash-cracker",
+              "api/services/risk-analyzer"
+            ]
+          },
+          {
+            "group": "Reporting",
+            "pages": [
+              "api/pdf-generator"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Interactive CLI with rich terminal UI",
+    "Network discovery and port scanning with Nmap",
+    "Automated SQL injection testing against DVWA",
+    "WordPress vulnerability scanning and brute-force attacks",
+    "Directory enumeration with Gobuster",
+    "MD5 hash cracking with dictionary attacks",
+    "Risk-based vulnerability scoring",
+    "Professional PDF report generation"
+  ],
+  "publicApiSurface": [
+    "AuditEngine.run_full_audit()",
+    "NmapScanner.full_scan()",
+    "NmapScanner.discover_network()",
+    "SQLMapInjector.attack()",
+    "WPForceBrute.attack()",
+    "GobusterEnum.enumerate()",
+    "HashCracker.crack_md5()",
+    "HashCracker.crack_credentials()",
+    "RiskAnalyzer.analyze()",
+    "PDFReportGenerator.generate()"
+  ]
+}
